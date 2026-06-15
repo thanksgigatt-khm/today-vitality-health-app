@@ -502,16 +502,19 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
   const routineInfo = routineTypes[routineType] || routineTypes.health;
   const [drafts, setDrafts] = useState(() => defaultRoutines(routineType));
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
 
   useEffect(() => {
     setDrafts(Object.fromEntries(days.map((day) => [day.id, mergeRoutine(day.id, routines[day.id], routineType)])));
+    setIsDirty(false);
     setSavedMessage("");
     setSaveErrorMessage("");
   }, [routines, routineType]);
 
   function updateRoutine(dayId, field, value) {
+    setIsDirty(true);
     setSavedMessage("");
     setSaveErrorMessage("");
     setDrafts((current) => ({
@@ -529,6 +532,7 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
     setSaveErrorMessage("");
     try {
       await onSave(drafts);
+      setIsDirty(false);
       setSavedMessage("루틴이 저장됐어요.");
     } catch (error) {
       setSaveErrorMessage(`저장 실패: ${error.message || "알 수 없는 오류"}`);
@@ -538,9 +542,21 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
   }
 
   function resetToDefault() {
+    setIsDirty(true);
     setSavedMessage("");
     setSaveErrorMessage("");
     setDrafts(defaultRoutines(routineType));
+  }
+
+  function closeSettings() {
+    if (isDirty && !confirm("저장되지 않은 변경사항이 있어요. 메인으로 돌아갈까요?")) return;
+    onClose();
+  }
+
+  function changeSettingsRoutineType(nextType) {
+    if (nextType === routineType) return;
+    if (isDirty && !confirm("저장되지 않은 변경사항이 있어요. 루틴 타입을 바꿀까요?")) return;
+    onChangeRoutineType(nextType);
   }
 
   return (
@@ -551,7 +567,7 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
           <h2>월~일 {routineInfo.label} 수정</h2>
         </div>
         <div className="routineSettingsActions">
-          <button className="smallButton subtleButton" onClick={onClose} disabled={saving}>
+          <button className="smallButton subtleButton" onClick={closeSettings} disabled={saving}>
             메인으로 돌아가기
           </button>
           <button className="smallButton" onClick={resetToDefault} disabled={saving}>
@@ -563,12 +579,12 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
         </div>
       </div>
 
-      <RoutineTypeTabs value={routineType} onChange={onChangeRoutineType} compact />
+      <RoutineTypeTabs value={routineType} onChange={changeSettingsRoutineType} compact />
 
       {savedMessage ? (
         <div className="routineSavedBanner">
           <p className="statusText successText">{savedMessage}</p>
-          <button className="smallButton subtleButton" onClick={onClose} disabled={saving}>
+          <button className="smallButton subtleButton" onClick={closeSettings} disabled={saving}>
             메인으로 돌아가기
           </button>
         </div>
@@ -1523,7 +1539,7 @@ function App() {
                   onClick={() => saveRecord()}
                   disabled={recordSaving || recordLoading}
                 >
-                  {recordSaving ? "저장 중..." : "저장"}
+                  {recordSaving ? "저장 중..." : "오늘 기록 저장"}
                 </button>
                 <button className="secondary" disabled={!user || recordSaving || recordLoading} onClick={resetDay}>
                   <RotateCcw size={16} /> 초기화
