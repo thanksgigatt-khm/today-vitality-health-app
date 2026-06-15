@@ -17,20 +17,39 @@ service cloud.firestore {
         ];
     }
 
+    function isApproved(uid) {
+      return exists(/databases/$(database)/documents/userProfiles/$(uid))
+        && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "approved";
+    }
+
     match /userProfiles/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create, update: if isOwner(uid)
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if isAdmin()
+        || (isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.role == "user"
+          && request.resource.data.status == "pending");
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.status == resource.data.status);
       allow delete: if isAdmin();
     }
 
-    match /userRoutineRecords/{recordId} {
-      allow read: if isAdmin()
-        || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create, update: if signedIn()
-        && request.resource.data.uid == request.auth.uid;
-      allow delete: if isAdmin()
-        || (signedIn() && resource.data.uid == request.auth.uid);
+    match /userRoutines/{uid}/days/{dayId} {
+      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow create, update: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow delete: if isAdmin();
+    }
+
+    match /userRoutineRecords/{uid}/records/{date} {
+      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow create, update: if isAdmin()
+        || (isOwner(uid)
+          && isApproved(uid)
+          && request.resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin() || (isOwner(uid) && isApproved(uid));
     }
   }
 }
