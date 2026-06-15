@@ -402,6 +402,72 @@ button:disabled, input:disabled, textarea:disabled {
   box-shadow: none;
 }
 
+.weeklyReportPanel {
+  border-color: color-mix(in srgb, var(--accent) 22%, white);
+}
+
+.weeklyStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.weeklyStatsGrid article {
+  background: white;
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  gap: 5px;
+}
+
+.weeklyStatsGrid strong {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.weeklyStatsGrid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.weeklyTableWrap {
+  overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,.06);
+}
+
+.weeklyTable {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  background: white;
+}
+
+.weeklyTable th,
+.weeklyTable td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  text-align: left;
+  vertical-align: top;
+}
+
+.weeklyTable th {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 950;
+  background: var(--accentSoft);
+}
+
+.weeklyTable td {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 760;
+}
+
 .mealGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
@@ -888,6 +954,232 @@ textarea:focus {
   height: 1920px;
   overflow: hidden;
   pointer-events: none;
+}
+
+.weeklyImageStage {
+  position: fixed;
+  top: 0;
+  left: -1400px;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.weeklyImageCard {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  padding: 86px 76px 72px;
+  background:
+    linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px) 0 0 / 100% 42px,
+    radial-gradient(circle at 16% 12%, rgba(255, 199, 218, .36), transparent 28%),
+    radial-gradient(circle at 90% 74%, rgba(255, 238, 190, .48), transparent 30%),
+    linear-gradient(180deg, #fff9f4 0%, #fff3f6 48%, #fff9ee 100%);
+  color: #3c2d35;
+  font-family: "Pretendard", "SUIT", "Nunito", "Quicksand", "Noto Sans KR", "Segoe UI", sans-serif;
+}
+
+.weeklyImageCard.routine-growth {
+  background:
+    linear-gradient(rgba(255,255,255,.45) 1px, transparent 1px) 0 0 / 100% 42px,
+    radial-gradient(circle at 18% 12%, rgba(196, 181, 253, .34), transparent 28%),
+    radial-gradient(circle at 88% 74%, rgba(153, 246, 228, .36), transparent 30%),
+    linear-gradient(180deg, #fffaff 0%, #f4fbff 48%, #f7fff9 100%);
+}
+
+.weeklyImageCard::before {
+  content: "";
+  position: absolute;
+  inset: 34px;
+  border: 3px solid rgba(255, 182, 198, .46);
+  border-radius: 54px;
+}
+
+.weeklyImageTape {
+  position: absolute;
+  width: 230px;
+  height: 58px;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px),
+    rgba(255, 219, 158, .8);
+  box-shadow: 0 12px 24px rgba(154, 92, 87, .12);
+}
+
+.weeklyImageHeader,
+.weeklyImageGoal,
+.weeklyImageStats,
+.weeklyImageTable,
+.weeklyImageMemo,
+.weeklyImageFooter {
+  position: relative;
+  z-index: 1;
+}
+
+.weeklyImageHeader {
+  min-height: 300px;
+  display: grid;
+  align-content: center;
+}
+
+.weeklyImageHeader p {
+  margin: 0 0 16px;
+  color: #e06f92;
+  font-family: "Quicksand", "Nunito", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 34px;
+  font-weight: 850;
+}
+
+.weeklyImageHeader h1 {
+  margin: 0;
+  font-size: 58px;
+  line-height: 1.16;
+  font-weight: 950;
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+.weeklyImageHeader span {
+  width: fit-content;
+  margin-top: 18px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #fff;
+  color: #8d6975;
+  font-size: 25px;
+  font-weight: 900;
+  box-shadow: 0 16px 34px rgba(171, 108, 126, .14);
+}
+
+.weeklyImageGoal,
+.weeklyImageMemo {
+  background: rgba(255,255,255,.88);
+  border: 2px solid rgba(255, 204, 216, .8);
+  box-shadow: 0 24px 48px rgba(137, 83, 97, .12);
+  border-radius: 34px;
+  padding: 28px 32px;
+}
+
+.weeklyImageGoal span,
+.weeklyImageMemo h2 {
+  display: block;
+  margin: 0 0 10px;
+  color: #df6f92;
+  font-family: "Quicksand", "Nunito", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 27px;
+  font-weight: 850;
+}
+
+.weeklyImageGoal strong {
+  font-size: 32px;
+  line-height: 1.35;
+}
+
+.weeklyImageStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin: 30px 0 24px;
+}
+
+.weeklyImageStats div {
+  min-height: 126px;
+  border-radius: 30px;
+  background: linear-gradient(145deg, #fff, #fff0f4);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  box-shadow: 0 18px 34px rgba(170, 99, 118, .1);
+}
+
+.weeklyImageStats strong {
+  color: #dd5f86;
+  font-size: 46px;
+}
+
+.weeklyImageStats span {
+  color: #8d6975;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.weeklyImageTable {
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+  border-radius: 38px;
+  background: rgba(255,255,255,.88);
+  border: 2px solid rgba(255, 204, 216, .8);
+  box-shadow: 0 24px 48px rgba(137, 83, 97, .12);
+}
+
+.weeklyImageRow {
+  display: grid;
+  grid-template-columns: 120px 110px 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px dashed rgba(173, 86, 113, .25);
+}
+
+.weeklyImageRow span {
+  color: #df6f92;
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.weeklyImageRow strong {
+  color: #3c2d35;
+  font-size: 30px;
+}
+
+.weeklyImageRow p {
+  margin: 0;
+  color: #7c6370;
+  font-size: 24px;
+  font-weight: 820;
+}
+
+.weeklyImageMemo {
+  margin-top: 24px;
+  min-height: 230px;
+}
+
+.weeklyImageMemo p {
+  margin: 0;
+  color: #4b3840;
+  font-size: 27px;
+  line-height: 1.45;
+  font-weight: 760;
+  white-space: pre-wrap;
+}
+
+.weeklyImageFooter {
+  position: absolute;
+  left: 76px;
+  right: 76px;
+  bottom: 92px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  border-radius: 34px;
+  background: rgba(255, 235, 241, .82);
+  color: #ad5671;
+}
+
+.weeklyImageFooter strong {
+  font-family: "Quicksand", "Nunito", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 34px;
+  font-weight: 850;
+}
+
+.weeklyImageFooter span {
+  font-size: 20px;
+  font-weight: 900;
 }
 
 .diaryImageCard {

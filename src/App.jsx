@@ -284,6 +284,14 @@ function dateForDayId(dayId, weekStart) {
   return formatDate(target);
 }
 
+function getWeekKey(weekStart, routineType) {
+  const date = parseDate(weekStart);
+  const thursday = addDays(date, 3);
+  const yearStart = new Date(thursday.getFullYear(), 0, 1);
+  const week = Math.ceil((((thursday - yearStart) / 86400000) + yearStart.getDay() + 1) / 7);
+  return `${thursday.getFullYear()}-W${String(week).padStart(2, "0")}-${routineType}`;
+}
+
 function csvValue(value) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
@@ -306,6 +314,93 @@ function checkedSummary(items, checks) {
   return items
     .map((item, index) => `${item}: ${checks[index] ? "완료" : "미완료"}`)
     .join(" / ");
+}
+
+function buildWeeklyRows(records, routineType, weekStart) {
+  const items = activeCheckItems(routineType);
+  const secondaryItems = activeSecondaryItems(routineType);
+  const recordsByDate = new Map(records.map((record) => [record.date || record.id, record]));
+
+  return days.map((day) => {
+    const date = dateForDayId(day.id, weekStart);
+    const record = recordsByDate.get(date) || {};
+    const checks = normalizeMap(record.checks);
+    const secondaryChecks = normalizeMap(record.waterChecks || record.waters);
+    const completedCount = Number.isFinite(record.completedCount)
+      ? record.completedCount
+      : items.filter((_, index) => checks[index]).length;
+    const secondaryCount = Number.isFinite(record.waterCount)
+      ? record.waterCount
+      : secondaryItems.filter((_, index) => secondaryChecks[index]).length;
+    const completionRate = Number.isFinite(record.completionRate)
+      ? record.completionRate
+      : Math.round((completedCount / items.length) * 100);
+
+    return {
+      date,
+      dayId: day.id,
+      dayLabel: day.fullLabel,
+      routineType,
+      completedCount,
+      completionRate,
+      secondaryCount,
+      memo: record.memo || "",
+      hasRecord: Boolean(record.date || record.id),
+      checkSummary: checkedSummary(items, checks),
+    };
+  });
+}
+
+function summarizeWeeklyRows(rows) {
+  const totalCompleted = rows.reduce((sum, row) => sum + row.completedCount, 0);
+  const totalSecondary = rows.reduce((sum, row) => sum + row.secondaryCount, 0);
+  const averageRate = rows.length
+    ? Math.round(rows.reduce((sum, row) => sum + row.completionRate, 0) / rows.length)
+    : 0;
+  const bestDay = rows.reduce((best, row) => (row.completionRate > best.completionRate ? row : best), rows[0] || { completionRate: 0, dayLabel: "" });
+  const lowestDay = rows.reduce((lowest, row) => (row.completionRate < lowest.completionRate ? row : lowest), rows[0] || { completionRate: 0, dayLabel: "" });
+  const weeklyMemo = rows
+    .filter((row) => row.memo)
+    .map((row) => `${row.dayLabel}: ${row.memo}`)
+    .join("\n");
+
+  return {
+    averageRate,
+    totalCompleted,
+    totalSecondary,
+    bestDay,
+    lowestDay,
+    weeklyMemo,
+  };
+}
+
+function buildWeeklyReportCsv(rows, summary, routineType, weekStart, weekEnd, userName) {
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+  const headerRows = [
+    ["주간 리포트", `${weekStart} ~ ${weekEnd}`, routineInfo.label],
+    ["사용자명", userName],
+    ["평균 완료율", `${summary.averageRate}%`],
+    ["총 체크 완료 수", summary.totalCompleted],
+    [routineType === "growth" ? "총 성장 체크 수" : "총 물 체크 수", summary.totalSecondary],
+    ["가장 잘한 날", `${summary.bestDay?.dayLabel || ""} ${summary.bestDay?.completionRate ?? 0}%`],
+    ["가장 낮은 날", `${summary.lowestDay?.dayLabel || ""} ${summary.lowestDay?.completionRate ?? 0}%`],
+    [],
+    ["날짜", "요일", "루틴 유형", "체크 완료 수", "완료율", routineType === "growth" ? "성장 체크 수" : "물 체크 수", "메모", "체크항목"],
+  ];
+  const dayRows = rows.map((row) => [
+    row.date,
+    row.dayLabel,
+    routineInfo.label,
+    row.completedCount,
+    `${row.completionRate}%`,
+    row.secondaryCount,
+    row.memo,
+    row.checkSummary,
+  ]);
+
+  return [...headerRows, ...dayRows]
+    .map((row) => row.map(csvValue).join(","))
+    .join("\r\n");
 }
 
 function buildRoutineCsv(records, profilesByUid) {
@@ -496,6 +591,129 @@ function DiaryImageCard({
         <span>{routineInfo.diaryFooterLabel} · saved with care</span>
       </footer>
     </article>
+  );
+}
+
+function WeeklyReportImageCard({ routineType, rows, summary, weekStart, weekEnd, weeklyGoal, userName }) {
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+
+  return (
+    <article className={`weeklyImageCard ${routineInfo.accentClass}`}>
+      <div className="weeklyImageTape tapeOne" />
+      <div className="weeklyImageTape tapeTwo" />
+      <header className="weeklyImageHeader">
+        <p>{routineType === "growth" ? "Weekly growth journal" : "Weekly wellness journal"}</p>
+        <h1>{weekStart} ~ {weekEnd}<br />{routineInfo.dayTitle} 주간 리포트</h1>
+        <span>{userName || "나"}님의 한 주 기록</span>
+      </header>
+
+      <section className="weeklyImageGoal">
+        <span>weekly promise</span>
+        <strong>{weeklyGoal || "이번 주도 작은 흐름을 이어갔어요."}</strong>
+      </section>
+
+      <section className="weeklyImageStats">
+        <div><strong>{summary.averageRate}%</strong><span>평균 완료율</span></div>
+        <div><strong>{summary.totalCompleted}</strong><span>총 체크</span></div>
+        <div><strong>{summary.totalSecondary}</strong><span>{routineType === "growth" ? "성장 체크" : "물 체크"}</span></div>
+      </section>
+
+      <section className="weeklyImageTable">
+        {rows.map((row) => (
+          <div className="weeklyImageRow" key={row.date}>
+            <span>{row.dayLabel}</span>
+            <strong>{row.completionRate}%</strong>
+            <p>{row.completedCount}개 완료 · {row.secondaryCount}개 체크</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="weeklyImageMemo">
+        <h2>week memo</h2>
+        <p>{summary.weeklyMemo || "아직 남긴 메모가 없어요. 다음 주의 나에게 한 줄을 남겨보세요."}</p>
+      </section>
+
+      <footer className="weeklyImageFooter">
+        <strong>{routineInfo.finalText}</strong>
+        <span>{routineInfo.diaryFooterLabel} · weekly report</span>
+      </footer>
+    </article>
+  );
+}
+
+function WeeklyReportPanel({
+  loading,
+  onClose,
+  onDownloadCsv,
+  onSaveImage,
+  imageSaving,
+  routineType,
+  rows,
+  summary,
+  weekEnd,
+  weekKey,
+  weekStart,
+}) {
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+
+  return (
+    <section className="panel weeklyReportPanel">
+      <div className="panelHead">
+        <div>
+          <p className="sectionLabel"><CalendarDays size={17} /> 주간 리포트</p>
+          <h2>{weekStart} ~ {weekEnd} · {routineInfo.label}</h2>
+          <p className="motto">{weekKey}</p>
+        </div>
+        <div className="adminActions">
+          <button className="smallButton" onClick={onDownloadCsv} disabled={loading}>
+            <Download size={16} /> CSV 다운로드
+          </button>
+          <button className="smallButton" onClick={onSaveImage} disabled={loading || imageSaving}>
+            {imageSaving ? "저장 중..." : "주간 이미지 저장"}
+          </button>
+          <button className="smallButton subtleButton" onClick={onClose}>
+            닫기
+          </button>
+        </div>
+      </div>
+
+      <div className="weeklyStatsGrid">
+        <article><strong>{summary.averageRate}%</strong><span>평균 완료율</span></article>
+        <article><strong>{summary.totalCompleted}</strong><span>총 체크 완료 수</span></article>
+        <article><strong>{summary.totalSecondary}</strong><span>{routineType === "growth" ? "총 성장 체크 수" : "총 물 체크 수"}</span></article>
+        <article><strong>{summary.bestDay?.dayLabel || "-"}</strong><span>가장 잘한 날 {summary.bestDay?.completionRate ?? 0}%</span></article>
+        <article><strong>{summary.lowestDay?.dayLabel || "-"}</strong><span>가장 낮은 날 {summary.lowestDay?.completionRate ?? 0}%</span></article>
+      </div>
+
+      <div className="weeklyTableWrap">
+        <table className="weeklyTable">
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th>요일</th>
+              <th>루틴 유형</th>
+              <th>체크 완료 수</th>
+              <th>완료율</th>
+              <th>{routineType === "growth" ? "성장 체크 수" : "물 체크 수"}</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.date}>
+                <td>{row.date}</td>
+                <td>{row.dayLabel}</td>
+                <td>{routineInfo.label}</td>
+                <td>{row.completedCount}</td>
+                <td>{row.completionRate}%</td>
+                <td>{row.secondaryCount}</td>
+                <td>{row.memo || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -887,6 +1105,7 @@ function AdminPanel() {
 
 function App() {
   const diaryRef = useRef(null);
+  const weeklyReportRef = useRef(null);
   const recordMessageTimerRef = useRef(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -904,6 +1123,10 @@ function App() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [recordSaveMessage, setRecordSaveMessage] = useState("");
   const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [showWeeklyReport, setShowWeeklyReport] = useState(false);
+  const [weeklyRecords, setWeeklyRecords] = useState([]);
+  const [weeklyReportLoading, setWeeklyReportLoading] = useState(false);
+  const [weeklyImageSaving, setWeeklyImageSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [routineNotice, setRoutineNotice] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
@@ -927,6 +1150,12 @@ function App() {
   const supportItems = activeSupportItems(routineType);
   const selectedWeekEnd = useMemo(() => getWeekEnd(selectedWeekStart), [selectedWeekStart]);
   const selectedDate = useMemo(() => dateForDayId(selectedDayId, selectedWeekStart), [selectedDayId, selectedWeekStart]);
+  const weekKey = useMemo(() => getWeekKey(selectedWeekStart, routineType), [routineType, selectedWeekStart]);
+  const weeklyRows = useMemo(
+    () => buildWeeklyRows(weeklyRecords, routineType, selectedWeekStart),
+    [routineType, selectedWeekStart, weeklyRecords]
+  );
+  const weeklySummary = useMemo(() => summarizeWeeklyRows(weeklyRows), [weeklyRows]);
   const completedCount = currentCheckItems.filter((_, index) => checks[index]).length;
   const waterCount = secondaryItems.filter((_, index) => waters[index]).length;
   const percent = Math.round((completedCount / currentCheckItems.length) * 100);
@@ -947,6 +1176,8 @@ function App() {
         setHasUnsavedChanges(false);
         setPendingNavigation(null);
         setRecordSaveMessage("");
+        setShowWeeklyReport(false);
+        setWeeklyRecords([]);
         setRoutines(defaultRoutines(routineType));
         setShowAdmin(false);
         setShowSettings(false);
@@ -1213,16 +1444,99 @@ function App() {
     action();
   }
 
+  async function loadWeeklyRecords() {
+    if (!canUseApp || !user) return [];
+    const recordsPath = `userRoutineRecords/${user.uid}/types/${routineType}/records`;
+    setWeeklyReportLoading(true);
+    setSaveError("");
+
+    try {
+      const recordsSnap = await getDocs(query(collection(db, "userRoutineRecords", user.uid, "types", routineType, "records"), orderBy("date", "asc")));
+      const rows = recordsSnap.docs
+        .map((recordDoc) => ({ id: recordDoc.id, ...recordDoc.data() }))
+        .filter((record) => record.weekStart === selectedWeekStart);
+      setWeeklyRecords(rows);
+      return rows;
+    } catch (error) {
+      console.error("[weekly-report] failed to load records", { path: recordsPath, routineType, weekStart: selectedWeekStart, error });
+      setSaveError(friendlyErrorMessage(error, "주간 기록을 불러오지 못했습니다."));
+      return [];
+    } finally {
+      setWeeklyReportLoading(false);
+    }
+  }
+
+  async function openWeeklyReport() {
+    if (hasUnsavedChanges) {
+      const saved = await saveRecord();
+      if (!saved) return;
+    }
+    await loadWeeklyRecords();
+    setShowWeeklyReport(true);
+  }
+
+  function downloadWeeklyCsv() {
+    const csv = buildWeeklyReportCsv(weeklyRows, weeklySummary, routineType, selectedWeekStart, selectedWeekEnd, userName);
+    const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${routineType}-week-${weekKey.replace(`-${routineType}`, "")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  async function saveWeeklyImage() {
+    setWeeklyImageSaving(true);
+    try {
+      if (hasUnsavedChanges) {
+        const saved = await saveRecord();
+        if (!saved) return;
+        await loadWeeklyRecords();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      if (!weeklyReportRef.current) {
+        throw new Error("주간 리포트 이미지를 준비하지 못했습니다.");
+      }
+
+      const dataUrl = await toPng(weeklyReportRef.current, {
+        cacheBust: true,
+        pixelRatio: 1,
+        width: 1080,
+        height: 1920,
+        canvasWidth: 1080,
+        canvasHeight: 1920,
+        backgroundColor: routineType === "growth" ? "#f7fbff" : "#fff7f2",
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `${routineType}-week-${weekKey.replace(`-${routineType}`, "")}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showRecordMessage("주간 이미지가 저장됐어요.");
+    } catch (error) {
+      setSaveError(friendlyErrorMessage(error, "주간 이미지를 저장하지 못했습니다."));
+    } finally {
+      setWeeklyImageSaving(false);
+    }
+  }
+
   function changeDay(dayId) {
     if (dayId === selectedDayId) return;
     requestNavigation(() => {
       setSelectedDayId(dayId);
+      setShowWeeklyReport(false);
     });
   }
 
   function moveWeek(offset) {
     requestNavigation(() => {
       setSelectedWeekStart((current) => addWeeks(current, offset));
+      setShowWeeklyReport(false);
     });
   }
 
@@ -1230,6 +1544,7 @@ function App() {
     requestNavigation(() => {
       setSelectedWeekStart(getWeekStart());
       setSelectedDayId(getTodayId());
+      setShowWeeklyReport(false);
     });
   }
 
@@ -1239,6 +1554,7 @@ function App() {
     requestNavigation(() => {
       setRoutineType(nextType);
       setRoutines(defaultRoutines(nextType));
+      setShowWeeklyReport(false);
       setRoutineNotice("");
       setSaveError("");
     });
@@ -1470,7 +1786,26 @@ function App() {
             <strong>{hasUnsavedChanges ? "저장되지 않은 변경사항이 있어요" : recordSaveMessage || "오늘 기록을 확인해 주세요"}</strong>
             <span>{selectedDate} · {routineInfo.label} · {recordLoading ? "불러오는 중" : "수동 저장"}</span>
           </div>
+          <button onClick={openWeeklyReport} disabled={recordSaving || weeklyReportLoading}>
+            {weeklyReportLoading ? "불러오는 중..." : "이번 주 정리 보기"}
+          </button>
         </section>
+
+        {showWeeklyReport ? (
+          <WeeklyReportPanel
+            loading={weeklyReportLoading}
+            imageSaving={weeklyImageSaving}
+            onClose={() => setShowWeeklyReport(false)}
+            onDownloadCsv={downloadWeeklyCsv}
+            onSaveImage={saveWeeklyImage}
+            routineType={routineType}
+            rows={weeklyRows}
+            summary={weeklySummary}
+            weekEnd={selectedWeekEnd}
+            weekKey={weekKey}
+            weekStart={selectedWeekStart}
+          />
+        ) : null}
 
         <section className="mealGrid">
           {meals.map((meal) => (
@@ -1602,6 +1937,22 @@ function App() {
                 userName={userName}
                 waterCount={waterCount}
                 waters={waters}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {canUseApp ? (
+          <div className="weeklyImageStage" aria-hidden="true">
+            <div ref={weeklyReportRef}>
+              <WeeklyReportImageCard
+                routineType={routineType}
+                rows={weeklyRows}
+                summary={weeklySummary}
+                weekStart={selectedWeekStart}
+                weekEnd={selectedWeekEnd}
+                weeklyGoal={selectedRoutine.goalText}
+                userName={userName}
               />
             </div>
           </div>
