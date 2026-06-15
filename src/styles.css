@@ -113,6 +113,12 @@ button:disabled, input:disabled, textarea:disabled {
   background: #2d2531;
 }
 
+.smallButton.subtleButton {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid rgba(0,0,0,.08);
+}
+
 .avatar {
   width: 34px;
   height: 34px;
@@ -574,6 +580,21 @@ textarea:focus {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.routineSavedBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #dff8e9;
+}
+
+.routineSavedBanner .statusText {
+  margin: 0;
 }
 
 .routineEditor {
@@ -1133,6 +1154,22 @@ textarea:focus {
 
   .routineEditorGrid {
     grid-template-columns: 1fr;
+  }
+
+  .routineSettings .panelHead {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .routineSettingsActions,
+  .routineSavedBanner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .routineSettingsActions .smallButton,
+  .routineSavedBanner .smallButton {
+    justify-content: center;
   }
 }
 

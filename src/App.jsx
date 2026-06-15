@@ -498,7 +498,7 @@ async function ensureDefaultRoutine(uid, routineType) {
   await batch.commit();
 }
 
-function RoutineSettings({ routines, routineType, onChangeRoutineType, onSave }) {
+function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, onSave }) {
   const routineInfo = routineTypes[routineType] || routineTypes.health;
   const [drafts, setDrafts] = useState(() => defaultRoutines(routineType));
   const [saving, setSaving] = useState(false);
@@ -551,6 +551,9 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onSave })
           <h2>월~일 {routineInfo.label} 수정</h2>
         </div>
         <div className="routineSettingsActions">
+          <button className="smallButton subtleButton" onClick={onClose} disabled={saving}>
+            메인으로 돌아가기
+          </button>
           <button className="smallButton" onClick={resetToDefault} disabled={saving}>
             기본 루틴으로 되돌리기
           </button>
@@ -562,7 +565,14 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onSave })
 
       <RoutineTypeTabs value={routineType} onChange={onChangeRoutineType} compact />
 
-      {savedMessage ? <p className="statusText successText">{savedMessage}</p> : null}
+      {savedMessage ? (
+        <div className="routineSavedBanner">
+          <p className="statusText successText">{savedMessage}</p>
+          <button className="smallButton subtleButton" onClick={onClose} disabled={saving}>
+            메인으로 돌아가기
+          </button>
+        </div>
+      ) : null}
       {saveErrorMessage ? <p className="statusText errorText">{saveErrorMessage}</p> : null}
 
       <div className="routineEditorGrid">
@@ -993,7 +1003,6 @@ function App() {
       });
       setRoutines(Object.keys(latestRoutines).length ? latestRoutines : mergedRoutines);
       setRoutineNotice("루틴이 저장됐어요.");
-      setShowSettings(false);
     } catch (error) {
       const message = error.message || "루틴을 저장하지 못했습니다.";
       console.error("[routine-editor] failed to save routines", {
@@ -1233,6 +1242,7 @@ function App() {
             routines={routines}
             routineType={routineType}
             onChangeRoutineType={changeRoutineType}
+            onClose={() => setShowSettings(false)}
             onSave={saveRoutineSettings}
           />
         ) : null}
