@@ -844,6 +844,7 @@ function App() {
   const [memo, setMemo] = useState("");
   const [recordLoading, setRecordLoading] = useState(false);
   const [recordSaving, setRecordSaving] = useState(false);
+  const [imageSaving, setImageSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [recordSaveMessage, setRecordSaveMessage] = useState("");
   const [pendingNavigation, setPendingNavigation] = useState(null);
@@ -1089,13 +1090,7 @@ function App() {
         { merge: true }
       );
       setHasUnsavedChanges(false);
-      setRecordSaveMessage("저장됐어요.");
-      if (recordMessageTimerRef.current) {
-        clearTimeout(recordMessageTimerRef.current);
-      }
-      recordMessageTimerRef.current = setTimeout(() => {
-        setRecordSaveMessage("");
-      }, 2000);
+      showRecordMessage("저장됐어요.");
       return true;
     } catch (error) {
       const message = error.message || "저장하지 못했습니다.";
@@ -1207,10 +1202,24 @@ function App() {
     markRecordDirty();
   }
 
+  function showRecordMessage(message) {
+    setRecordSaveMessage(message);
+    if (recordMessageTimerRef.current) {
+      clearTimeout(recordMessageTimerRef.current);
+    }
+    recordMessageTimerRef.current = setTimeout(() => {
+      setRecordSaveMessage("");
+    }, 2000);
+  }
+
   async function copyToday() {
     const text = `[${selectedDate} ${selectedDay.fullLabel} ${routineInfo.label} 기록]\n완료: ${completedCount}/${currentCheckItems.length}\n${routineInfo.secondarySummary}: ${waterCount}/${secondaryItems.length}\n\n루틴\n- 아침: ${selectedRoutine.morning}\n- 점심/틈새: ${selectedRoutine.lunch}\n- 오후/퇴근 전: ${selectedRoutine.afternoon}\n- 저녁: ${selectedRoutine.evening}\n- 마무리: ${selectedRoutine.closing || "없음"}\n\n메모\n${memo || "없음"}`;
-    await navigator.clipboard.writeText(text);
-    alert("오늘 기록을 복사했어요.");
+    try {
+      await navigator.clipboard.writeText(text);
+      showRecordMessage("텍스트 기록이 복사됐어요.");
+    } catch (error) {
+      setSaveError(error.message || "텍스트 기록을 복사하지 못했습니다.");
+    }
   }
 
   async function createDiaryPngDataUrl() {
@@ -1230,7 +1239,10 @@ function App() {
   }
 
   async function saveDiaryImage() {
+    setImageSaving(true);
     try {
+      const saved = await saveRecord();
+      if (!saved) return;
       const dataUrl = await createDiaryPngDataUrl();
       const link = document.createElement("a");
       link.href = dataUrl;
@@ -1238,8 +1250,11 @@ function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      showRecordMessage("다이어리 이미지가 저장됐어요.");
     } catch (error) {
-      alert(error.message || "다이어리 이미지를 저장하지 못했어요.");
+      setSaveError(error.message || "다이어리 이미지를 저장하지 못했어요.");
+    } finally {
+      setImageSaving(false);
     }
   }
 
@@ -1274,7 +1289,7 @@ function App() {
   }
 
   function resetDay() {
-    if (!confirm(`${selectedDate} ${routineInfo.label} 기록을 초기화할까요?`)) return;
+    if (!confirm("현재 날짜의 기록을 초기화할까요?")) return;
     setChecks({});
     setWaters({});
     setMemo("");
@@ -1403,9 +1418,6 @@ function App() {
             <strong>{hasUnsavedChanges ? "저장되지 않은 변경사항이 있어요" : recordSaveMessage || "오늘 기록을 확인해 주세요"}</strong>
             <span>{selectedDate} · {routineInfo.label} · {recordLoading ? "불러오는 중" : "수동 저장"}</span>
           </div>
-          <button onClick={() => saveRecord()} disabled={recordSaving || recordLoading || !hasUnsavedChanges}>
-            {recordSaving ? "저장 중..." : "오늘 기록 저장"}
-          </button>
         </section>
 
         <section className="mealGrid">
@@ -1491,11 +1503,33 @@ function App() {
             onChange={(event) => saveMemo(event.target.value)}
             placeholder={routineInfo.memoPlaceholder}
           />
-          <div className="actions">
-            <button onClick={copyToday}>오늘 기록 복사</button>
-            <button onClick={saveDiaryImage}>다이어리 이미지 저장</button>
-            <button onClick={copyDiaryImage}>다이어리 이미지 복사</button>
-            <button className="secondary" disabled={!user} onClick={resetDay}><RotateCcw size={16} /> 초기화</button>
+          <div className="recordActionGroups">
+            <section className="recordActionGroup">
+              <h3>오늘의 기록</h3>
+              <div className="recordActionGrid">
+                <button onClick={copyToday} disabled={recordLoading}>
+                  텍스트 복사
+                </button>
+                <button onClick={saveDiaryImage} disabled={recordSaving || imageSaving || recordLoading}>
+                  {imageSaving ? "저장 중..." : "이미지 저장"}
+                </button>
+              </div>
+            </section>
+            <section className="recordActionGroup">
+              <h3>기록 관리</h3>
+              <div className="recordActionGrid">
+                <button
+                  className={hasUnsavedChanges ? "primaryDirty" : ""}
+                  onClick={() => saveRecord()}
+                  disabled={recordSaving || recordLoading}
+                >
+                  {recordSaving ? "저장 중..." : "저장"}
+                </button>
+                <button className="secondary" disabled={!user || recordSaving || recordLoading} onClick={resetDay}>
+                  <RotateCcw size={16} /> 초기화
+                </button>
+              </div>
+            </section>
           </div>
         </section>
           </>

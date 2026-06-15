@@ -580,14 +580,31 @@ textarea:focus {
   box-shadow: 0 0 0 4px var(--accentSoft);
 }
 
-.actions {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-  margin-top: 12px;
+.recordActionGroups {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
 }
 
-.actions button {
+.recordActionGroup {
+  display: grid;
+  gap: 9px;
+}
+
+.recordActionGroup h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  letter-spacing: -0.03em;
+}
+
+.recordActionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.recordActionGrid button {
   border: 0;
   border-radius: 15px;
   background: var(--accent);
@@ -598,9 +615,15 @@ textarea:focus {
   align-items: center;
   gap: 6px;
   cursor: pointer;
+  justify-content: center;
+  min-height: 46px;
 }
 
-.actions .secondary {
+.recordActionGrid .primaryDirty {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.recordActionGrid .secondary {
   background: #817789;
 }
 
