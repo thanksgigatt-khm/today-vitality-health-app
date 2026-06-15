@@ -39,6 +39,8 @@ const routineTypes = {
     id: "health",
     label: "건강루틴",
     title: "오늘 활력소 건강루틴",
+    diaryTitle: "오늘의 건강루틴",
+    diaryFooterLabel: "오늘 건강루틴",
     eyebrow: "나만의 건강 체크 앱",
     journalLabel: "Daily wellness journal",
     dayTitle: "오늘의 건강루틴",
@@ -59,6 +61,8 @@ const routineTypes = {
     id: "growth",
     label: "성장루틴",
     title: "오늘 활력소 성장루틴",
+    diaryTitle: "오늘의 성장루틴",
+    diaryFooterLabel: "오늘 성장루틴",
     eyebrow: "작은 반복을 쌓는 성장 기록",
     journalLabel: "Daily growth journal",
     dayTitle: "오늘의 성장루틴",
@@ -425,7 +429,7 @@ function DiaryImageCard({
       <header className="diaryHeader">
         <div>
           <p>{routineInfo.journalLabel}</p>
-          <h1>{routineInfo.title}</h1>
+          <h1>{routineInfo.diaryTitle}</h1>
           <span>{userName || "나의 기록"}님의 다이어리 노트</span>
         </div>
         <div className="diaryCharacter">
@@ -489,7 +493,7 @@ function DiaryImageCard({
 
       <footer className="diaryFooter">
         <strong>{routineInfo.finalText}</strong>
-        <span>{routineInfo.title} · saved with care</span>
+        <span>{routineInfo.diaryFooterLabel} · saved with care</span>
       </footer>
     </article>
   );
