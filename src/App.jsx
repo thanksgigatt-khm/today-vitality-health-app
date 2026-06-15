@@ -1058,6 +1058,7 @@ function App() {
   }
 
   function changeRoutineType(nextType) {
+    if (!routineTypes[nextType]) return;
     setRoutineType(nextType);
     setRoutines(defaultRoutines(nextType));
     setChecks({});

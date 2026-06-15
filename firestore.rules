@@ -28,6 +28,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "approved";
     }
 
+    function isRoutineType(routineType) {
+      return routineType in ["health", "growth"];
+    }
+
     function isLegacyProfileMigration(uid) {
       return isOwner(uid)
         && request.resource.data.uid == request.auth.uid
@@ -69,13 +73,15 @@ service cloud.firestore {
     }
 
     match /userRoutines/{uid}/types/{routineType}/days/{dayId} {
-      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
-      allow create, update: if isAdmin()
-        || (isOwner(uid)
+      allow read: if isRoutineType(routineType)
+        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
+      allow create, update: if (isAdmin() && isRoutineType(routineType))
+        || (isRoutineType(routineType)
+          && isOwner(uid)
           && isApproved(uid)
           && request.resource.data.dayId == dayId
           && request.resource.data.routineType == routineType);
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && isRoutineType(routineType);
     }
 
     match /userRoutineRecords/{uid}/records/{date} {
@@ -88,13 +94,16 @@ service cloud.firestore {
     }
 
     match /userRoutineRecords/{uid}/types/{routineType}/records/{date} {
-      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
-      allow create, update: if isAdmin()
-        || (isOwner(uid)
+      allow read: if isRoutineType(routineType)
+        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
+      allow create, update: if (isAdmin() && isRoutineType(routineType))
+        || (isRoutineType(routineType)
+          && isOwner(uid)
           && isApproved(uid)
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.routineType == routineType);
-      allow delete: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow delete: if isRoutineType(routineType)
+        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
     }
   }
 }
