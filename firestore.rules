@@ -22,6 +22,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "approved";
     }
 
+    function isLegacyProfileMigration(uid) {
+      return isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && resource.data.status == null
+        && request.resource.data.role == "user"
+        && request.resource.data.status == "pending";
+    }
+
     match /userProfiles/{uid} {
       allow read: if isOwner(uid) || isAdmin();
       allow create: if isAdmin()
@@ -30,6 +38,7 @@ service cloud.firestore {
           && request.resource.data.role == "user"
           && request.resource.data.status == "pending");
       allow update: if isAdmin()
+        || isLegacyProfileMigration(uid)
         || (isOwner(uid)
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.role == resource.data.role

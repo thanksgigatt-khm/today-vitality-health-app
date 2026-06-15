@@ -161,20 +161,19 @@ button:disabled, input:disabled, textarea:disabled {
 }
 
 .weekNavigator {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px;
-  margin: 10px 0 2px;
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  margin: 10px 0 4px;
   background: rgba(255,255,255,.78);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow: 0 10px 24px rgba(0,0,0,.05);
 }
 
 .weekNavigator.compact {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .weekNavigator div {
@@ -187,19 +186,40 @@ button:disabled, input:disabled, textarea:disabled {
 
 .weekNavigator span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
+}
+
+.weekNavigator strong {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.weekButtons {
+  width: min(100%, 360px);
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .weekNavigator button {
   border: 0;
-  border-radius: 14px;
-  background: var(--accent);
-  color: white;
-  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f7d8e2;
+  color: #9d4c66;
+  padding: 8px 8px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1;
   font-weight: 900;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.weekNavigator .currentWeekButton {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .dayTabs {
@@ -1030,8 +1050,22 @@ textarea:focus {
   }
 
   .weekNavigator {
-    flex-wrap: wrap;
-    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .weekButtons {
+    width: 100%;
+    gap: 5px;
+  }
+
+  .weekNavigator button {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .weekNavigator strong {
+    font-size: 14px;
   }
 
   .adminGrid {

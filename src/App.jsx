@@ -505,13 +505,15 @@ function AdminPanel() {
       {error ? <p className="statusText errorText">{error}</p> : null}
 
       <section className="weekNavigator compact">
-        <button onClick={() => setAdminWeekStart((current) => addWeeks(current, -1))}>지난주</button>
         <div>
-          <strong>{adminWeekStart} ~ {getWeekEnd(adminWeekStart)}</strong>
           <span>관리자 조회 주간</span>
+          <strong>{adminWeekStart} ~ {getWeekEnd(adminWeekStart)}</strong>
         </div>
-        <button onClick={() => setAdminWeekStart(getWeekStart())}>이번 주</button>
-        <button onClick={() => setAdminWeekStart((current) => addWeeks(current, 1))}>다음주</button>
+        <div className="weekButtons">
+          <button onClick={() => setAdminWeekStart((current) => addWeeks(current, -1))}>지난주</button>
+          <button className="currentWeekButton" onClick={() => setAdminWeekStart(getWeekStart())}>이번 주</button>
+          <button onClick={() => setAdminWeekStart((current) => addWeeks(current, 1))}>다음주</button>
+        </div>
       </section>
 
       <div className="adminGrid">
@@ -957,13 +959,15 @@ function App() {
         {canUseApp ? (
           <>
         <section className="weekNavigator">
-          <button onClick={() => moveWeek(-1)}>지난주</button>
           <div>
+            <span>{selectedWeekStart === getWeekStart() ? "이번 주 기록" : "선택한 주 기록"}</span>
             <strong>{selectedWeekStart} ~ {selectedWeekEnd}</strong>
-            <span>{selectedWeekStart === getWeekStart() ? "이번 주" : "선택한 주"}</span>
           </div>
-          <button onClick={goThisWeek}>이번 주</button>
-          <button onClick={() => moveWeek(1)}>다음주</button>
+          <div className="weekButtons">
+            <button onClick={() => moveWeek(-1)}>지난주</button>
+            <button className="currentWeekButton" onClick={goThisWeek}>이번 주</button>
+            <button onClick={() => moveWeek(1)}>다음주</button>
+          </div>
         </section>
 
         <section className="dayTabs">
