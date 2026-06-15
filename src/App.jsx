@@ -285,27 +285,39 @@ function csvValue(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function checkLabel(value) {
-  return value ? "완료" : "";
+function formatTimestamp(value) {
+  const date = value?.toDate ? value.toDate() : value instanceof Date ? value : null;
+  return date ? date.toISOString() : "";
+}
+
+function friendlyErrorMessage(error, fallback) {
+  const message = error?.message || fallback;
+  if (message?.includes("Missing or insufficient permissions")) {
+    return `${message} Firestore rules에서 승인 상태와 저장 경로 권한을 확인해 주세요.`;
+  }
+  return message || fallback;
+}
+
+function checkedSummary(items, checks) {
+  return items
+    .map((item, index) => `${item}: ${checks[index] ? "완료" : "미완료"}`)
+    .join(" / ");
 }
 
 function buildRoutineCsv(records, profilesByUid) {
   const headers = [
+    "사용자명",
+    "이메일",
     "routineType",
     "날짜",
     "요일",
-    "사용자명",
-    "이메일",
-    "아침완료",
-    "점심완료",
-    "퇴근전쉐이크",
-    "물체크",
-    "저녁패스",
-    "간보기1번",
-    "집어먹지않기",
+    "weekStart",
+    "weekEnd",
+    "체크항목",
     "메모",
     "완료개수",
     "완료율",
+    "updatedAt",
   ];
 
   const rows = records.map((record) => {
@@ -317,21 +329,18 @@ function buildRoutineCsv(records, profilesByUid) {
     const completedRate = `${Math.round((completedCount / items.length) * 100)}%`;
 
     return [
+      record.displayName || profile?.displayName || "",
+      record.email || profile?.email || "",
       record.routineType || "health",
       record.date || formatDate(record.updatedAt),
       day?.fullLabel || record.dayId || "",
-      record.displayName || profile?.displayName || "",
-      record.email || profile?.email || "",
-      checkLabel(checks[0]),
-      checkLabel(checks[1]),
-      checkLabel(checks[2]),
-      checkLabel(checks[3]),
-      checkLabel(checks[6]),
-      checkLabel(checks[5]),
-      checkLabel(checks[4]),
+      record.weekStart || "",
+      record.weekEnd || "",
+      checkedSummary(items, checks),
       record.memo || "",
       completedCount,
       completedRate,
+      formatTimestamp(record.updatedAt),
     ];
   });
 
@@ -636,7 +645,7 @@ function AdminPanel() {
       setProfiles(nextProfiles);
       setSelectedUid((uid) => uid || nextProfiles[0]?.uid || "");
     } catch (adminError) {
-      setError(adminError.message || "관리자 데이터를 불러오지 못했습니다.");
+      setError(friendlyErrorMessage(adminError, "관리자 데이터를 불러오지 못했습니다."));
     } finally {
       setLoading(false);
     }
@@ -662,7 +671,7 @@ function AdminPanel() {
         await loadUserDetails(uid);
       }
     } catch (statusError) {
-      setError(statusError.message || "사용자 상태를 변경하지 못했습니다.");
+      setError(friendlyErrorMessage(statusError, "사용자 상태를 변경하지 못했습니다."));
     }
   }
 
@@ -686,7 +695,7 @@ function AdminPanel() {
           .filter((record) => record.weekStart === adminWeekStart)
       );
     } catch (detailsError) {
-      setError(detailsError.message || "사용자 상세 데이터를 불러오지 못했습니다.");
+      setError(friendlyErrorMessage(detailsError, "사용자 상세 데이터를 불러오지 못했습니다."));
     }
   }
 
@@ -727,7 +736,7 @@ function AdminPanel() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (csvError) {
-      setError(csvError.message || "CSV를 다운로드하지 못했습니다.");
+      setError(friendlyErrorMessage(csvError, "CSV를 다운로드하지 못했습니다."));
     }
   }
 
@@ -947,7 +956,7 @@ function App() {
     return onSnapshot(doc(db, "userProfiles", user.uid), (snapshot) => {
       setProfile(snapshot.exists() ? snapshot.data() : null);
     }, (error) => {
-      setSaveError(error.message || "사용자 상태를 불러오지 못했습니다.");
+      setSaveError(friendlyErrorMessage(error, "사용자 상태를 불러오지 못했습니다."));
     });
   }, [user]);
 
@@ -955,7 +964,7 @@ function App() {
     if (!canUseApp || !user) return undefined;
 
     ensureDefaultRoutine(user.uid, routineType).catch((error) => {
-      setSaveError(error.message || "개인 루틴 기본값을 만들지 못했습니다.");
+      setSaveError(friendlyErrorMessage(error, "개인 루틴 기본값을 만들지 못했습니다."));
     });
 
     return onSnapshot(collection(db, "userRoutines", user.uid, "types", routineType, "days"), (snapshot) => {
@@ -965,7 +974,7 @@ function App() {
       });
       setRoutines(nextRoutines);
     }, (error) => {
-      setSaveError(error.message || "개인 루틴을 불러오지 못했습니다.");
+      setSaveError(friendlyErrorMessage(error, "개인 루틴을 불러오지 못했습니다."));
     });
   }, [canUseApp, routineType, user]);
 
@@ -999,7 +1008,7 @@ function App() {
       } catch (error) {
         console.error("[daily-record] failed to load record", { path: recordPath, error });
         if (!active) return;
-        setSaveError(error.message || "기록을 불러오지 못했습니다.");
+        setSaveError(friendlyErrorMessage(error, "기록을 불러오지 못했습니다."));
         setRecordLoading(false);
       }
     }
@@ -1051,7 +1060,7 @@ function App() {
       setRoutines(Object.keys(latestRoutines).length ? latestRoutines : mergedRoutines);
       setRoutineNotice("루틴이 저장됐어요.");
     } catch (error) {
-      const message = error.message || "루틴을 저장하지 못했습니다.";
+      const message = friendlyErrorMessage(error, "루틴을 저장하지 못했습니다.");
       console.error("[routine-editor] failed to save routines", {
         uid: user.uid,
         routineType,
@@ -1109,7 +1118,7 @@ function App() {
       showRecordMessage("저장됐어요.");
       return true;
     } catch (error) {
-      const message = error.message || "저장하지 못했습니다.";
+      const message = friendlyErrorMessage(error, "저장하지 못했습니다.");
       console.error("[daily-record] failed to save record", {
         uid: user.uid,
         routineType,
@@ -1129,7 +1138,7 @@ function App() {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      setSaveError(error.message || "Google 로그인에 실패했습니다.");
+      setSaveError(friendlyErrorMessage(error, "Google 로그인에 실패했습니다."));
     }
   }
 
@@ -1234,7 +1243,7 @@ function App() {
       await navigator.clipboard.writeText(text);
       showRecordMessage("텍스트 기록이 복사됐어요.");
     } catch (error) {
-      setSaveError(error.message || "텍스트 기록을 복사하지 못했습니다.");
+      setSaveError(friendlyErrorMessage(error, "텍스트 기록을 복사하지 못했습니다."));
     }
   }
 
@@ -1268,7 +1277,7 @@ function App() {
       document.body.removeChild(link);
       showRecordMessage("다이어리 이미지가 저장됐어요.");
     } catch (error) {
-      setSaveError(error.message || "다이어리 이미지를 저장하지 못했어요.");
+      setSaveError(friendlyErrorMessage(error, "다이어리 이미지를 저장하지 못했어요."));
     } finally {
       setImageSaving(false);
     }
