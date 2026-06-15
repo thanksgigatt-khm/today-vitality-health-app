@@ -831,6 +831,7 @@ function AdminPanel() {
 
 function App() {
   const diaryRef = useRef(null);
+  const recordMessageTimerRef = useRef(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -842,6 +843,10 @@ function App() {
   const [waters, setWaters] = useState({});
   const [memo, setMemo] = useState("");
   const [recordLoading, setRecordLoading] = useState(false);
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [recordSaveMessage, setRecordSaveMessage] = useState("");
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [routineNotice, setRoutineNotice] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
@@ -882,6 +887,9 @@ function App() {
         setChecks({});
         setWaters({});
         setMemo("");
+        setHasUnsavedChanges(false);
+        setPendingNavigation(null);
+        setRecordSaveMessage("");
         setRoutines(defaultRoutines(routineType));
         setShowAdmin(false);
         setShowSettings(false);
@@ -908,6 +916,12 @@ function App() {
         { merge: true }
       );
     });
+  }, []);
+
+  useEffect(() => () => {
+    if (recordMessageTimerRef.current) {
+      clearTimeout(recordMessageTimerRef.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -941,27 +955,43 @@ function App() {
   useEffect(() => {
     if (!canUseApp || !user) return undefined;
 
+    let active = true;
     setRecordLoading(true);
     setSaveError("");
+    setRecordSaveMessage("");
+    setChecks({});
+    setWaters({});
+    setMemo("");
+    setHasUnsavedChanges(false);
 
-    return onSnapshot(
-      doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
-      async (snapshot) => {
+    async function loadRecord() {
+      const recordPath = `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
+      try {
+        const snapshot = await getDoc(doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate));
         let data = snapshot.data();
         if (!snapshot.exists() && routineType === "health") {
           const legacySnap = await getDoc(doc(db, "userRoutineRecords", user.uid, "records", selectedDate));
           data = legacySnap.data();
         }
+        if (!active) return;
         setChecks(normalizeMap(data?.checks));
         setWaters(normalizeMap(data?.waterChecks || data?.waters));
         setMemo(data?.memo || "");
+        setHasUnsavedChanges(false);
         setRecordLoading(false);
-      },
-      (error) => {
+      } catch (error) {
+        console.error("[daily-record] failed to load record", { path: recordPath, error });
+        if (!active) return;
         setSaveError(error.message || "기록을 불러오지 못했습니다.");
         setRecordLoading(false);
       }
-    );
+    }
+
+    loadRecord();
+
+    return () => {
+      active = false;
+    };
   }, [canUseApp, routineType, selectedDate, user]);
 
   async function saveRoutineSettings(nextRoutines) {
@@ -1016,16 +1046,25 @@ function App() {
     }
   }
 
-  async function saveRecord(nextValues) {
-    if (!canUseApp || !user) return;
+  async function saveRecord(nextValues = {}) {
+    if (!canUseApp || !user) return false;
 
     const nextChecks = normalizeMap(nextValues.checks ?? checks);
     const nextWaters = normalizeMap(nextValues.waters ?? waters);
     const nextMemo = nextValues.memo ?? memo;
+    const recordPath = `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
 
+    setRecordSaving(true);
+    setRecordSaveMessage("");
     setSaveError("");
 
     try {
+      console.info("[daily-record] saving record", {
+        uid: user.uid,
+        routineType,
+        path: recordPath,
+        date: selectedDate,
+      });
       await setDoc(
         doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
         {
@@ -1040,6 +1079,7 @@ function App() {
           routine: selectedRoutine,
           checks: nextChecks,
           waterChecks: nextWaters,
+          waterGoal: selectedRoutine.waterGoal,
           memo: nextMemo,
           completedCount: currentCheckItems.filter((_, index) => nextChecks[index]).length,
           waterCount: secondaryItems.filter((_, index) => nextWaters[index]).length,
@@ -1048,8 +1088,28 @@ function App() {
         },
         { merge: true }
       );
+      setHasUnsavedChanges(false);
+      setRecordSaveMessage("저장됐어요.");
+      if (recordMessageTimerRef.current) {
+        clearTimeout(recordMessageTimerRef.current);
+      }
+      recordMessageTimerRef.current = setTimeout(() => {
+        setRecordSaveMessage("");
+      }, 2000);
+      return true;
     } catch (error) {
-      setSaveError(error.message || "저장하지 못했습니다.");
+      const message = error.message || "저장하지 못했습니다.";
+      console.error("[daily-record] failed to save record", {
+        uid: user.uid,
+        routineType,
+        path: recordPath,
+        date: selectedDate,
+        error,
+      });
+      setSaveError(`저장 실패: ${message}`);
+      return false;
+    } finally {
+      setRecordSaving(false);
     }
   }
 
@@ -1066,54 +1126,85 @@ function App() {
     await signOut(auth);
   }
 
+  function markRecordDirty() {
+    setHasUnsavedChanges(true);
+    setRecordSaveMessage("");
+    setSaveError("");
+  }
+
+  function requestNavigation(action) {
+    if (!hasUnsavedChanges) {
+      action();
+      return;
+    }
+
+    setPendingNavigation({ action });
+  }
+
+  async function saveThenNavigate() {
+    if (!pendingNavigation) return;
+    const saved = await saveRecord();
+    if (!saved) return;
+    const action = pendingNavigation.action;
+    setPendingNavigation(null);
+    action();
+  }
+
+  function navigateWithoutSaving() {
+    if (!pendingNavigation) return;
+    const action = pendingNavigation.action;
+    setPendingNavigation(null);
+    setHasUnsavedChanges(false);
+    setRecordSaveMessage("");
+    action();
+  }
+
   function changeDay(dayId) {
-    setSelectedDayId(dayId);
-    setChecks({});
-    setWaters({});
-    setMemo("");
+    if (dayId === selectedDayId) return;
+    requestNavigation(() => {
+      setSelectedDayId(dayId);
+    });
   }
 
   function moveWeek(offset) {
-    setSelectedWeekStart((current) => addWeeks(current, offset));
-    setChecks({});
-    setWaters({});
-    setMemo("");
+    requestNavigation(() => {
+      setSelectedWeekStart((current) => addWeeks(current, offset));
+    });
   }
 
   function goThisWeek() {
-    setSelectedWeekStart(getWeekStart());
-    setSelectedDayId(getTodayId());
-    setChecks({});
-    setWaters({});
-    setMemo("");
+    requestNavigation(() => {
+      setSelectedWeekStart(getWeekStart());
+      setSelectedDayId(getTodayId());
+    });
   }
 
   function changeRoutineType(nextType) {
     if (!routineTypes[nextType]) return;
-    setRoutineType(nextType);
-    setRoutines(defaultRoutines(nextType));
-    setChecks({});
-    setWaters({});
-    setMemo("");
-    setRoutineNotice("");
-    setSaveError("");
+    if (nextType === routineType) return;
+    requestNavigation(() => {
+      setRoutineType(nextType);
+      setRoutines(defaultRoutines(nextType));
+      setRoutineNotice("");
+      setSaveError("");
+    });
   }
 
   function toggleCheck(index) {
     const next = { ...checks, [index]: !checks[index] };
     setChecks(next);
-    saveRecord({ checks: next });
+    markRecordDirty();
   }
 
   function toggleWater(index) {
     const next = { ...waters, [index]: !waters[index] };
     setWaters(next);
-    saveRecord({ waters: next });
+    markRecordDirty();
   }
 
   function saveMemo(value) {
     setMemo(value);
-    saveRecord({ memo: value });
+    markRecordDirty();
   }
 
   async function copyToday() {
@@ -1187,7 +1278,7 @@ function App() {
     setChecks({});
     setWaters({});
     setMemo("");
-    saveRecord({ checks: {}, waters: {}, memo: "" });
+    markRecordDirty();
   }
 
   const meals = [
@@ -1307,6 +1398,16 @@ function App() {
           <div className="oilBadge">{recordLoading ? "불러오는 중" : selectedRoutine.waterGoal}</div>
         </section>
 
+        <section className={`recordSavePanel ${hasUnsavedChanges ? "dirty" : ""}`}>
+          <div>
+            <strong>{hasUnsavedChanges ? "저장되지 않은 변경사항이 있어요" : recordSaveMessage || "오늘 기록을 확인해 주세요"}</strong>
+            <span>{selectedDate} · {routineInfo.label} · {recordLoading ? "불러오는 중" : "수동 저장"}</span>
+          </div>
+          <button onClick={() => saveRecord()} disabled={recordSaving || recordLoading || !hasUnsavedChanges}>
+            {recordSaving ? "저장 중..." : "오늘 기록 저장"}
+          </button>
+        </section>
+
         <section className="mealGrid">
           {meals.map((meal) => (
             <article className="mealCard" key={meal.time}>
@@ -1416,6 +1517,27 @@ function App() {
                 waterCount={waterCount}
                 waters={waters}
               />
+            </div>
+          </div>
+        ) : null}
+
+        {pendingNavigation ? (
+          <div className="unsavedOverlay" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
+            <div className="unsavedDialog">
+              <p className="sectionLabel"><ClipboardCheck size={17} /> 저장 확인</p>
+              <h2 id="unsaved-title">저장하지 않은 내용이 있어요. 이동할까요?</h2>
+              <p>현재 날짜의 {routineInfo.label} 기록을 저장한 뒤 이동하거나, 저장하지 않고 이동할 수 있어요.</p>
+              <div className="unsavedActions">
+                <button onClick={saveThenNavigate} disabled={recordSaving}>
+                  {recordSaving ? "저장 중..." : "저장 후 이동"}
+                </button>
+                <button className="secondary" onClick={navigateWithoutSaving} disabled={recordSaving}>
+                  그냥 이동
+                </button>
+                <button className="ghost" onClick={() => setPendingNavigation(null)} disabled={recordSaving}>
+                  취소
+                </button>
+              </div>
             </div>
           </div>
         ) : null}

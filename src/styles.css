@@ -348,6 +348,60 @@ button:disabled, input:disabled, textarea:disabled {
   white-space: nowrap;
 }
 
+.recordSavePanel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 14px;
+  padding: 13px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.82);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0,0,0,.05);
+}
+
+.recordSavePanel.dirty {
+  border-color: color-mix(in srgb, var(--accent) 42%, white);
+  background: linear-gradient(135deg, var(--accentSoft), rgba(255,255,255,.9));
+}
+
+.recordSavePanel div {
+  display: grid;
+  gap: 3px;
+}
+
+.recordSavePanel strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.recordSavePanel span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.recordSavePanel button {
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: white;
+  padding: 12px 15px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.recordSavePanel.dirty button {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.recordSavePanel button:disabled {
+  background: #b8aebd;
+  box-shadow: none;
+}
+
 .mealGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
@@ -548,6 +602,62 @@ textarea:focus {
 
 .actions .secondary {
   background: #817789;
+}
+
+.unsavedOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(45, 37, 49, .38);
+  backdrop-filter: blur(8px);
+}
+
+.unsavedDialog {
+  width: min(440px, 100%);
+  border-radius: 26px;
+  padding: 22px;
+  background: white;
+  border: 1px solid rgba(255,255,255,.82);
+  box-shadow: 0 24px 70px rgba(45, 37, 49, .2);
+}
+
+.unsavedDialog h2 {
+  margin: 0;
+  letter-spacing: -0.04em;
+}
+
+.unsavedDialog p:not(.sectionLabel) {
+  color: var(--muted);
+  line-height: 1.55;
+  font-weight: 760;
+}
+
+.unsavedActions {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.unsavedActions button {
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: white;
+  padding: 13px 14px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.unsavedActions .secondary {
+  background: #817789;
+}
+
+.unsavedActions .ghost {
+  background: #f3eef5;
+  color: var(--text);
 }
 
 .adminPanel {
@@ -1127,6 +1237,16 @@ textarea:focus {
   .todayCard {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .recordSavePanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recordSavePanel button {
+    width: 100%;
+    justify-content: center;
   }
 
   .weekNavigator {
