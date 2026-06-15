@@ -846,6 +846,10 @@ function App() {
     [routines, routineType, selectedDayId]
   );
   const routineInfo = routineTypes[routineType] || routineTypes.health;
+  const heroImageSrc = routineType === "growth" ? "/growth-main-image.png" : "/main-image.png";
+  const heroImageAlt = routineType === "growth"
+    ? "오늘 활력소 성장루틴 메인 이미지"
+    : "오늘 활력소 건강루틴 메인 이미지";
   const currentCheckItems = activeCheckItems(routineType);
   const secondaryItems = activeSecondaryItems(routineType);
   const supportItems = activeSupportItems(routineType);
@@ -1200,7 +1204,7 @@ function App() {
           {saveError ? <p className="statusText errorText">{saveError}</p> : null}
         </div>
         <div className="heroImageWrap">
-          <img src="/main-image.png" alt="오늘 활력소 메인 이미지" />
+          <img src={heroImageSrc} alt={heroImageAlt} />
         </div>
       </header>
 
