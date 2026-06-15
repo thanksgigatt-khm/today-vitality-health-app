@@ -293,7 +293,7 @@ function formatTimestamp(value) {
 function friendlyErrorMessage(error, fallback) {
   const message = error?.message || fallback;
   if (message?.includes("Missing or insufficient permissions")) {
-    return `${message} Firestore rules에서 승인 상태와 저장 경로 권한을 확인해 주세요.`;
+    return `${message} Firestore rules에서 로그인 상태, blocked 여부, 저장 경로 권한을 확인해 주세요.`;
   }
   return message || fallback;
 }
@@ -793,17 +793,23 @@ function AdminPanel() {
             >
               <strong>{profile.displayName || "이름 없음"}</strong>
               <span>{profile.email}</span>
-              <span className={`statusBadge ${profile.status || "pending"}`}>{profile.status || "pending"}</span>
-              {(profile.status || "pending") === "pending" ? (
-                <div className="approvalActions">
+              <span className={`statusBadge ${profile.status || "active"}`}>{profile.status || "active"}</span>
+              <div className="approvalActions">
+                {(profile.status || "active") === "pending" ? (
                   <button type="button" onClick={(event) => { event.stopPropagation(); updateUserStatus(profile.uid, "approved"); }}>
                     승인
                   </button>
+                ) : null}
+                {(profile.status || "active") === "blocked" ? (
+                  <button type="button" onClick={(event) => { event.stopPropagation(); updateUserStatus(profile.uid, "active"); }}>
+                    활성화
+                  </button>
+                ) : (
                   <button type="button" onClick={(event) => { event.stopPropagation(); updateUserStatus(profile.uid, "blocked"); }}>
                     차단
                   </button>
-                </div>
-              ) : null}
+                )}
+              </div>
             </button>
           ))}
         </div>
@@ -900,7 +906,7 @@ function App() {
   const waterCount = secondaryItems.filter((_, index) => waters[index]).length;
   const percent = Math.round((completedCount / currentCheckItems.length) * 100);
   const isAdmin = user && adminEmails().includes(user.email?.toLowerCase());
-  const canUseApp = Boolean(user && (isAdmin || profile?.status === "approved"));
+  const canUseApp = Boolean(user && (isAdmin || (profile && profile.status !== "blocked")));
   const userName = user?.displayName || profile?.displayName || user?.email || "나";
 
   useEffect(() => {
@@ -926,13 +932,16 @@ function App() {
       const profileRef = doc(db, "userProfiles", nextUser.uid);
       const profileSnap = await getDoc(profileRef);
       const existingProfile = profileSnap.exists() ? profileSnap.data() : {};
+      if (existingProfile.status === "blocked" && !isAdminEmail) {
+        return;
+      }
       const nextProfile = {
         uid: nextUser.uid,
         email: nextUser.email || "",
         displayName: nextUser.displayName || "",
         photoURL: nextUser.photoURL || "",
         role: isAdminEmail ? "admin" : existingProfile.role || "user",
-        status: isAdminEmail ? "approved" : existingProfile.status || "pending",
+        status: existingProfile.status === "blocked" ? "blocked" : existingProfile.status || "active",
         updatedAt: serverTimestamp(),
       };
 
@@ -1390,13 +1399,6 @@ function App() {
           <section className="panel accessPanel">
             <p className="sectionLabel"><ShieldCheck size={17} /> 계정 제한</p>
             <h2>사용이 제한된 계정입니다.</h2>
-          </section>
-        ) : null}
-
-        {user && !canUseApp && profile?.status !== "blocked" ? (
-          <section className="panel accessPanel">
-            <p className="sectionLabel"><ShieldCheck size={17} /> 승인 대기</p>
-            <h2>승인 대기 중입니다. 관리자가 승인하면 건강루틴을 사용할 수 있어요.</h2>
           </section>
         ) : null}
 

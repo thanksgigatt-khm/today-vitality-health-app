@@ -10,95 +10,81 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    function isAdmin() {
-      return signedIn() && (
-        request.auth.token.email in [
-          "thanks.gigatt@gmail.com"
-        ]
-        || (
-          exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid))
-          && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == "admin"
-          && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.status == "approved"
-        )
-      );
+    function isAdminEmail() {
+      return signedIn() && request.auth.token.email in [
+        "thanks.gigatt@gmail.com"
+      ];
     }
 
-    function isApproved(uid) {
+    function isAdmin() {
+      return isAdminEmail()
+        || (
+          signedIn()
+          && exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == "admin"
+        );
+    }
+
+    function isBlocked(uid) {
       return exists(/databases/$(database)/documents/userProfiles/$(uid))
-        && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "approved";
+        && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "blocked";
     }
 
     function canUseOwnData(uid) {
-      return isOwner(uid) && isApproved(uid);
+      return isOwner(uid) && !isBlocked(uid);
     }
 
     function isRoutineType(routineType) {
       return routineType == "health" || routineType == "growth";
     }
 
-    function isLegacyProfileMigration(uid) {
-      return isOwner(uid)
-        && request.resource.data.uid == request.auth.uid
-        && resource.data.status == null
-        && request.resource.data.role == "user"
-        && request.resource.data.status == "pending";
+    function isUsableStatus(status) {
+      return status == "active" || status == "approved" || status == "pending";
+    }
+
+    function validOwnRole(role) {
+      return (isAdminEmail() && role == "admin") || (!isAdminEmail() && role == "user");
     }
 
     match /userProfiles/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
+      allow read: if isAdmin() || isOwner(uid);
       allow create: if isAdmin()
         || (isOwner(uid)
-          && request.auth.token.email in [
-            "thanks.gigatt@gmail.com"
-          ]
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.role == "admin"
-          && request.resource.data.status == "approved")
-        || (isOwner(uid)
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.role == "user"
-          && request.resource.data.status == "pending");
+          && request.resource.data.email == request.auth.token.email
+          && validOwnRole(request.resource.data.role)
+          && isUsableStatus(request.resource.data.status));
       allow update: if isAdmin()
-        || isLegacyProfileMigration(uid)
         || (isOwner(uid)
+          && !isBlocked(uid)
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.status == resource.data.status);
+          && request.resource.data.email == request.auth.token.email
+          && (
+            request.resource.data.role == resource.data.role
+            || (resource.data.role == null && validOwnRole(request.resource.data.role))
+          )
+          && (
+            request.resource.data.status == resource.data.status
+            || (resource.data.status == null && isUsableStatus(request.resource.data.status))
+          ));
       allow delete: if isAdmin();
     }
 
     match /userRoutines/{uid}/days/{dayId} {
-      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
-      allow create, update: if isAdmin()
-        || (isOwner(uid)
-          && isApproved(uid)
-          && request.resource.data.dayId == dayId);
-      allow delete: if isAdmin();
+      allow read, write: if isAdmin() || canUseOwnData(uid);
     }
 
     match /userRoutines/{uid}/types/{routineType}/days/{dayId} {
-      allow read: if isRoutineType(routineType)
+      allow read, write: if isRoutineType(routineType)
         && (isAdmin() || canUseOwnData(uid));
-      allow create, update: if isRoutineType(routineType)
-        && (isAdmin() || canUseOwnData(uid));
-      allow delete: if isAdmin() && isRoutineType(routineType);
     }
 
     match /userRoutineRecords/{uid}/records/{date} {
-      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
-      allow create, update: if isAdmin()
-        || (isOwner(uid)
-          && isApproved(uid)
-          && request.resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow read, write: if isAdmin() || canUseOwnData(uid);
     }
 
     match /userRoutineRecords/{uid}/types/{routineType}/records/{date} {
-      allow read: if isRoutineType(routineType)
-        && (isAdmin() || canUseOwnData(uid));
-      allow create, update: if isRoutineType(routineType)
-        && (isAdmin() || canUseOwnData(uid));
-      allow delete: if isRoutineType(routineType)
+      allow read, write: if isRoutineType(routineType)
         && (isAdmin() || canUseOwnData(uid));
     }
   }

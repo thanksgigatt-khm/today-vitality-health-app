@@ -816,6 +816,11 @@ textarea:focus {
   color: #14723b;
 }
 
+.statusBadge.active {
+  background: #dff8e9;
+  color: #14723b;
+}
+
 .statusBadge.blocked {
   background: #ffe1e1;
   color: #b4232d;
