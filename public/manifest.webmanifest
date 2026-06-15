@@ -1,0 +1,23 @@
+{
+  "name": "오늘 활력소 건강루틴",
+  "short_name": "건강루틴",
+  "theme_color": "#ec4f9a",
+  "background_color": "#fff4fa",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
