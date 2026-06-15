@@ -329,7 +329,7 @@ function App() {
           {saveError ? <p className="statusText errorText">{saveError}</p> : null}
         </div>
         <div className="heroImageWrap">
-          <img src={selectedDay.characterImage} alt={selectedDay.characterName} />
+          <img src="/main-image.png" alt="오늘 활력소 메인 이미지" />
         </div>
       </header>
 
