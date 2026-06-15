@@ -28,6 +28,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/userProfiles/$(uid)).data.status == "approved";
     }
 
+    function canUseOwnData(uid) {
+      return isOwner(uid) && isApproved(uid);
+    }
+
     function isRoutineType(routineType) {
       return routineType == "health" || routineType == "growth";
     }
@@ -74,13 +78,9 @@ service cloud.firestore {
 
     match /userRoutines/{uid}/types/{routineType}/days/{dayId} {
       allow read: if isRoutineType(routineType)
-        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
-      allow create, update: if (isAdmin() && isRoutineType(routineType))
-        || (isRoutineType(routineType)
-          && isOwner(uid)
-          && isApproved(uid)
-          && request.resource.data.dayId == dayId
-          && request.resource.data.routineType == routineType);
+        && (isAdmin() || canUseOwnData(uid));
+      allow create, update: if isRoutineType(routineType)
+        && (isAdmin() || canUseOwnData(uid));
       allow delete: if isAdmin() && isRoutineType(routineType);
     }
 
@@ -95,15 +95,11 @@ service cloud.firestore {
 
     match /userRoutineRecords/{uid}/types/{routineType}/records/{date} {
       allow read: if isRoutineType(routineType)
-        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
-      allow create, update: if (isAdmin() && isRoutineType(routineType))
-        || (isRoutineType(routineType)
-          && isOwner(uid)
-          && isApproved(uid)
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.routineType == routineType);
+        && (isAdmin() || canUseOwnData(uid));
+      allow create, update: if isRoutineType(routineType)
+        && (isAdmin() || canUseOwnData(uid));
       allow delete: if isRoutineType(routineType)
-        && (isAdmin() || (isOwner(uid) && isApproved(uid)));
+        && (isAdmin() || canUseOwnData(uid));
     }
   }
 }
