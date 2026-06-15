@@ -301,6 +301,7 @@ function RoutineSettings({ routines, onSave }) {
   const [drafts, setDrafts] = useState(defaultRoutines);
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
 
   useEffect(() => {
     setDrafts(Object.fromEntries(days.map((day) => [day.id, mergeRoutine(day.id, routines[day.id])])));
@@ -308,6 +309,7 @@ function RoutineSettings({ routines, onSave }) {
 
   function updateRoutine(dayId, field, value) {
     setSavedMessage("");
+    setSaveErrorMessage("");
     setDrafts((current) => ({
       ...current,
       [dayId]: {
@@ -320,9 +322,12 @@ function RoutineSettings({ routines, onSave }) {
   async function saveAll() {
     setSaving(true);
     setSavedMessage("");
+    setSaveErrorMessage("");
     try {
       await onSave(drafts);
       setSavedMessage("루틴이 저장됐어요.");
+    } catch (error) {
+      setSaveErrorMessage(`저장 실패: ${error.message || "알 수 없는 오류"}`);
     } finally {
       setSaving(false);
     }
@@ -330,6 +335,7 @@ function RoutineSettings({ routines, onSave }) {
 
   function resetToDefault() {
     setSavedMessage("");
+    setSaveErrorMessage("");
     setDrafts(defaultRoutines());
   }
 
@@ -345,12 +351,13 @@ function RoutineSettings({ routines, onSave }) {
             기본 루틴으로 되돌리기
           </button>
           <button className="smallButton" onClick={saveAll} disabled={saving}>
-            {saving ? "저장 중" : "저장"}
+            {saving ? "저장 중..." : "저장"}
           </button>
         </div>
       </div>
 
       {savedMessage ? <p className="statusText successText">{savedMessage}</p> : null}
+      {saveErrorMessage ? <p className="statusText errorText">{saveErrorMessage}</p> : null}
 
       <div className="routineEditorGrid">
         {days.map((day) => {
@@ -705,23 +712,37 @@ function App() {
   }, [canUseApp, selectedDate, user]);
 
   async function saveRoutineSettings(nextRoutines) {
-    if (!canUseApp || !user) return;
+    if (!canUseApp || !user) {
+      throw new Error("승인된 로그인 사용자만 루틴을 저장할 수 있습니다.");
+    }
 
     setRoutineNotice("");
-    const batch = writeBatch(db);
-    days.forEach((day) => {
-      batch.set(
-        doc(db, "userRoutines", user.uid, "days", day.id),
-        {
-          ...mergeRoutine(day.id, nextRoutines[day.id]),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-    });
-    await batch.commit();
-    setRoutineNotice("루틴이 저장됐어요.");
-    setShowSettings(false);
+    setSaveError("");
+
+    try {
+      const batch = writeBatch(db);
+      const mergedRoutines = {};
+      days.forEach((day) => {
+        const routine = mergeRoutine(day.id, nextRoutines[day.id]);
+        mergedRoutines[day.id] = routine;
+        batch.set(
+          doc(db, "userRoutines", user.uid, "days", day.id),
+          {
+            ...routine,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+      setRoutines(mergedRoutines);
+      setRoutineNotice("루틴이 저장됐어요.");
+      setShowSettings(false);
+    } catch (error) {
+      const message = error.message || "루틴을 저장하지 못했습니다.";
+      setSaveError(`저장 실패: ${message}`);
+      throw new Error(message);
+    }
   }
 
   async function saveRecord(nextValues) {

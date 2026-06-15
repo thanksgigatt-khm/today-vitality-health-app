@@ -11,10 +11,16 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn()
-        && request.auth.token.email in [
+      return signedIn() && (
+        request.auth.token.email in [
           "thanks.gigatt@gmail.com"
-        ];
+        ]
+        || (
+          exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == "admin"
+          && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.status == "approved"
+        )
+      );
     }
 
     function isApproved(uid) {
@@ -34,6 +40,13 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
       allow create: if isAdmin()
         || (isOwner(uid)
+          && request.auth.token.email in [
+            "thanks.gigatt@gmail.com"
+          ]
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.role == "admin"
+          && request.resource.data.status == "approved")
+        || (isOwner(uid)
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.role == "user"
           && request.resource.data.status == "pending");
@@ -48,7 +61,10 @@ service cloud.firestore {
 
     match /userRoutines/{uid}/days/{dayId} {
       allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
-      allow create, update: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow create, update: if isAdmin()
+        || (isOwner(uid)
+          && isApproved(uid)
+          && request.resource.data.dayId == dayId);
       allow delete: if isAdmin();
     }
 
