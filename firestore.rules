@@ -68,12 +68,32 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /userRoutines/{uid}/types/{routineType}/days/{dayId} {
+      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow create, update: if isAdmin()
+        || (isOwner(uid)
+          && isApproved(uid)
+          && request.resource.data.dayId == dayId
+          && request.resource.data.routineType == routineType);
+      allow delete: if isAdmin();
+    }
+
     match /userRoutineRecords/{uid}/records/{date} {
       allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
       allow create, update: if isAdmin()
         || (isOwner(uid)
           && isApproved(uid)
           && request.resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin() || (isOwner(uid) && isApproved(uid));
+    }
+
+    match /userRoutineRecords/{uid}/types/{routineType}/records/{date} {
+      allow read: if isAdmin() || (isOwner(uid) && isApproved(uid));
+      allow create, update: if isAdmin()
+        || (isOwner(uid)
+          && isApproved(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.routineType == routineType);
       allow delete: if isAdmin() || (isOwner(uid) && isApproved(uid));
     }
   }

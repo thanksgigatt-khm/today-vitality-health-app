@@ -40,6 +40,12 @@ button:disabled, input:disabled, textarea:disabled {
 .theme-blue { --accent: #20a8f7; --accentSoft: #d9f2ff; --bg: #f2fbff; }
 .theme-purple { --accent: #7c3aed; --accentSoft: #ece1ff; --bg: #faf5ff; }
 .theme-team { --accent: #ff5b77; --accentSoft: #fff0d9; --bg: #fffaf4; }
+.routine-growth {
+  --accent: #7c5cff;
+  --accentSoft: #ebe7ff;
+  --bg: #f8fbff;
+  --card: rgba(255, 255, 255, 0.86);
+}
 
 .app {
   min-height: 100vh;
@@ -158,6 +164,40 @@ button:disabled, input:disabled, textarea:disabled {
 .container {
   width: min(1100px, calc(100% - 28px));
   margin: 0 auto;
+}
+
+.routineTypeTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 8px;
+  padding: 7px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.78);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0,0,0,.05);
+}
+
+.routineTypeTabs.compact {
+  max-width: 420px;
+  margin-top: 12px;
+}
+
+.routineTypeTabs button {
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 8px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.routineTypeTabs button.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .weekNavigator {
@@ -304,7 +344,7 @@ button:disabled, input:disabled, textarea:disabled {
 
 .mealGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
   gap: 14px;
   margin: 14px 0;
 }
@@ -704,6 +744,25 @@ textarea:focus {
     linear-gradient(180deg, #fff9f4 0%, #fff3f6 48%, #fff9ee 100%);
   color: #3c2d35;
   font-family: "Segoe UI", "Noto Sans KR", sans-serif;
+}
+
+.diaryImageCard.routine-growth {
+  background:
+    linear-gradient(rgba(255,255,255,.45) 1px, transparent 1px) 0 0 / 100% 42px,
+    radial-gradient(circle at 18% 12%, rgba(196, 181, 253, .34), transparent 28%),
+    radial-gradient(circle at 88% 74%, rgba(153, 246, 228, .36), transparent 30%),
+    linear-gradient(180deg, #fffaff 0%, #f4fbff 48%, #f7fff9 100%);
+}
+
+.diaryImageCard.routine-growth .diaryCharacter {
+  background: linear-gradient(145deg, #fff, #e8fff9);
+}
+
+.diaryImageCard.routine-growth .diaryGoalNote,
+.diaryImageCard.routine-growth .diaryPaperSection,
+.diaryImageCard.routine-growth .diaryMemo,
+.diaryImageCard.routine-growth .diaryMiniNote {
+  border-color: rgba(190, 181, 255, .72);
 }
 
 .diaryImageCard::before {

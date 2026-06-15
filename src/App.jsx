@@ -30,10 +30,147 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { auth, db, googleProvider } from "./firebase";
-import { appInfo, checkItems, days, emergencyFoods, waterItems } from "./data/routineData";
+import { appInfo, checkItems as healthCheckItems, days, emergencyFoods, waterItems as healthWaterItems } from "./data/routineData";
 import "./styles.css";
 
 const dayOrder = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const routineTypes = {
+  health: {
+    id: "health",
+    label: "건강루틴",
+    title: "오늘 활력소 건강루틴",
+    eyebrow: "나만의 건강 체크 앱",
+    journalLabel: "Daily wellness journal",
+    dayTitle: "오늘의 건강루틴",
+    checkTitle: "오늘 성공률",
+    secondaryLabel: "물 목표",
+    secondaryTitle: "나눠 마시기 체크",
+    secondarySummary: "물 체크",
+    secondaryFieldLabel: "물 목표",
+    memoLabel: "오늘 메모",
+    memoTitle: "배고픔·컨디션·실패 포인트 기록",
+    memoPlaceholder: "예: 퇴근 후 배고픔 7/10, 아이들 밥 차릴 때 간보기 1번, 물은 1.2L 정도",
+    supportLabel: "비상 보완식",
+    supportTitle: "무리하지 않고 막는 선택지",
+    finalText: "오늘도 흐름을 이어간 나를 칭찬해요",
+    accentClass: "routine-health",
+  },
+  growth: {
+    id: "growth",
+    label: "성장루틴",
+    title: "오늘 활력소 성장루틴",
+    eyebrow: "작은 반복을 쌓는 성장 기록",
+    journalLabel: "Daily growth journal",
+    dayTitle: "오늘의 성장루틴",
+    checkTitle: "오늘 성장률",
+    secondaryLabel: "성장 체크",
+    secondaryTitle: "작은 성장 미션 체크",
+    secondarySummary: "성장 체크",
+    secondaryFieldLabel: "학습 목표",
+    memoLabel: "성장 메모",
+    memoTitle: "배운 것·느낀 것·내일 계획 기록",
+    memoPlaceholder: "예: 책 10쪽 읽음, 오늘 배운 것 한 줄 정리, 감사한 일 1개",
+    supportLabel: "성장 아이디어",
+    supportTitle: "오늘 바로 해볼 수 있는 작은 선택",
+    finalText: "작은 반복이 오늘의 나를 자라게 했어요",
+    accentClass: "routine-growth",
+  },
+};
+
+const growthCheckItems = [
+  "아침 성장 목표 1개 적기",
+  "독서 10분 또는 강의 1개 듣기",
+  "학습 20분 또는 복습하기",
+  "오늘 배운 것 한 줄 정리",
+  "감사/묵상/마음 정리 1분",
+  "책상 정리 또는 내일 준비하기",
+  "스마트폰 시간 지키기",
+  "성장 메모 남기기",
+];
+
+const growthSecondaryItems = [
+  { label: "목표", amount: "1개" },
+  { label: "독서", amount: "10분" },
+  { label: "학습", amount: "20분" },
+  { label: "정리", amount: "1줄" },
+  { label: "마음", amount: "1분" },
+];
+
+const growthIdeas = [
+  "책 10쪽 읽기",
+  "오늘 배운 것 한 줄 쓰기",
+  "숙제/할 일 확인하기",
+  "책상 정리하기",
+  "감사한 일 1개 적기",
+  "말씀·기도 또는 마음 정리 1분",
+  "스마트폰 시간 지키기",
+];
+
+const growthRoutineTemplates = {
+  mon: {
+    morning: "오늘의 성장 목표 1개 적기",
+    lunch: "독서 10분 또는 강의 1개 듣기",
+    afternoon: "학습 20분 또는 복습하기",
+    evening: "오늘 배운 것 한 줄 정리",
+    closing: "감사한 일 1개 적고 내일 할 일 보기",
+    waterGoal: "성장 미션 3개",
+    goalText: "작은 반복이 나를 자라게 해요",
+  },
+  tue: {
+    morning: "오늘 꼭 해낼 작은 공부 목표 정하기",
+    lunch: "책 10쪽 읽기 또는 좋은 문장 표시하기",
+    afternoon: "배운 내용 3줄 복습하기",
+    evening: "책상 정리하고 오늘의 배움 남기기",
+    closing: "마음 정리 1분과 내일 계획 1개",
+    waterGoal: "성장 미션 3개",
+    goalText: "조금씩 해도 쌓이면 달라져요",
+  },
+  wed: {
+    morning: "오늘 배우고 싶은 것 하나 고르기",
+    lunch: "강의 1개 또는 독서 10분",
+    afternoon: "어려웠던 부분 다시 보기",
+    evening: "오늘 배운 것 한 줄 쓰기",
+    closing: "감사/묵상/기도 또는 마음 정리",
+    waterGoal: "성장 미션 3개",
+    goalText: "중간에도 다시 시작할 수 있어요",
+  },
+  thu: {
+    morning: "나를 키우는 질문 하나 적기",
+    lunch: "책 10쪽 읽고 핵심 단어 적기",
+    afternoon: "학습 20분 집중하기",
+    evening: "오늘 잘한 습관 하나 칭찬하기",
+    closing: "내일의 첫 행동 정하기",
+    waterGoal: "성장 미션 3개",
+    goalText: "오늘의 작은 집중이 내일의 힘이에요",
+  },
+  fri: {
+    morning: "이번 주 성장 포인트 떠올리기",
+    lunch: "독서/강의 10분으로 흐름 잇기",
+    afternoon: "한 가지 과제 마무리하기",
+    evening: "이번 주 배운 것 한 줄 정리",
+    closing: "주말에도 지킬 작은 약속 정하기",
+    waterGoal: "성장 미션 3개",
+    goalText: "완벽보다 이어가는 힘을 선택해요",
+  },
+  sat: {
+    morning: "오늘의 자유 성장 목표 정하기",
+    lunch: "책, 숙제, 취미 중 하나 10분 하기",
+    afternoon: "내 공간 또는 책상 정리하기",
+    evening: "가족/나에게 감사한 일 1개 적기",
+    closing: "스마트폰 시간 돌아보고 마음 정리",
+    waterGoal: "성장 미션 2개",
+    goalText: "주말에도 나를 돌보는 성장을 해요",
+  },
+  sun: {
+    morning: "다음 주에 자라고 싶은 모습 적기",
+    lunch: "가볍게 독서하거나 말씀/묵상하기",
+    afternoon: "다음 주 준비물과 할 일 확인하기",
+    evening: "이번 주 배운 것 3가지 돌아보기",
+    closing: "내일의 첫 목표를 작게 정하기",
+    waterGoal: "성장 미션 2개",
+    goalText: "새 주를 위한 마음과 책상을 정리해요",
+  },
+};
 
 function getTodayId() {
   const jsDay = new Date().getDay();
@@ -51,27 +188,50 @@ function adminEmails() {
     .filter(Boolean);
 }
 
-function defaultRoutineForDay(day) {
+function activeCheckItems(routineType) {
+  return routineType === "growth" ? growthCheckItems : healthCheckItems;
+}
+
+function activeSecondaryItems(routineType) {
+  return routineType === "growth" ? growthSecondaryItems : healthWaterItems;
+}
+
+function activeSupportItems(routineType) {
+  return routineType === "growth" ? growthIdeas : emergencyFoods;
+}
+
+function defaultRoutineForDay(day, routineType = "health") {
+  if (routineType === "growth") {
+    return {
+      dayId: day.id,
+      routineType,
+      ...growthRoutineTemplates[day.id],
+    };
+  }
+
   return {
     dayId: day.id,
+    routineType,
     morning: `${day.meals[0]?.title || ""} ${day.meals[0]?.desc || ""}`.trim(),
     lunch: `${day.meals[1]?.title || ""} ${day.meals[1]?.desc || ""}`.trim(),
     afternoon: `${day.meals[2]?.title || ""} ${day.meals[2]?.desc || ""}`.trim(),
     evening: `${day.meals[3]?.title || ""} ${day.meals[3]?.desc || ""}`.trim(),
+    closing: "오늘 컨디션과 내일 흐름 짧게 정리하기",
     waterGoal: "1.5L",
     goalText: day.motto || "",
   };
 }
 
-function defaultRoutines() {
-  return Object.fromEntries(days.map((day) => [day.id, defaultRoutineForDay(day)]));
+function defaultRoutines(routineType = "health") {
+  return Object.fromEntries(days.map((day) => [day.id, defaultRoutineForDay(day, routineType)]));
 }
 
-function mergeRoutine(dayId, routine) {
+function mergeRoutine(dayId, routine, routineType = "health") {
   return {
-    ...defaultRoutineForDay(days.find((day) => day.id === dayId) || days[0]),
+    ...defaultRoutineForDay(days.find((day) => day.id === dayId) || days[0], routineType),
     ...(routine || {}),
     dayId,
+    routineType,
   };
 }
 
@@ -131,6 +291,7 @@ function checkLabel(value) {
 
 function buildRoutineCsv(records, profilesByUid) {
   const headers = [
+    "routineType",
     "날짜",
     "요일",
     "사용자명",
@@ -149,12 +310,14 @@ function buildRoutineCsv(records, profilesByUid) {
 
   const rows = records.map((record) => {
     const checks = normalizeMap(record.checks);
+    const items = activeCheckItems(record.routineType || "health");
     const day = days.find((item) => item.id === record.dayId);
     const profile = profilesByUid.get(record.uid);
-    const completedCount = checkItems.filter((_, index) => checks[index]).length;
-    const completedRate = `${Math.round((completedCount / checkItems.length) * 100)}%`;
+    const completedCount = items.filter((_, index) => checks[index]).length;
+    const completedRate = `${Math.round((completedCount / items.length) * 100)}%`;
 
     return [
+      record.routineType || "health",
       record.date || formatDate(record.updatedAt),
       day?.fullLabel || record.dayId || "",
       record.displayName || profile?.displayName || "",
@@ -187,11 +350,29 @@ function checkedItemsFromMap(items, checkedMap) {
   return items.filter((_, index) => checkedMap[index]).map((item) => limitText(item, 34));
 }
 
+function RoutineTypeTabs({ value, onChange, compact = false }) {
+  return (
+    <section className={`routineTypeTabs ${compact ? "compact" : ""}`} aria-label="루틴 타입 선택">
+      {Object.values(routineTypes).map((type) => (
+        <button
+          type="button"
+          key={type.id}
+          className={value === type.id ? "active" : ""}
+          onClick={() => onChange(type.id)}
+        >
+          {type.label}
+        </button>
+      ))}
+    </section>
+  );
+}
+
 function DiaryImageCard({
   checks,
   completedCount,
   memo,
   percent,
+  routineType,
   selectedDate,
   selectedDay,
   selectedRoutine,
@@ -199,12 +380,15 @@ function DiaryImageCard({
   waterCount,
   waters,
 }) {
-  const checkedRoutineItems = checkedItemsFromMap(checkItems, checks);
-  const checkedWaterItems = waterItems.filter((_, index) => waters[index]);
-  const memoText = limitText(memo, 180) || "오늘의 컨디션과 마음을 짧게 남겨보세요.";
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+  const items = activeCheckItems(routineType);
+  const secondaryItems = activeSecondaryItems(routineType);
+  const checkedRoutineItems = checkedItemsFromMap(items, checks);
+  const checkedSecondaryItems = secondaryItems.filter((_, index) => waters[index]);
+  const memoText = limitText(memo, 180) || (routineType === "growth" ? "오늘 배운 것과 마음을 짧게 남겨보세요." : "오늘의 컨디션과 마음을 짧게 남겨보세요.");
 
   return (
-    <article className={`diaryImageCard theme-${selectedDay.theme}`}>
+    <article className={`diaryImageCard theme-${selectedDay.theme} ${routineInfo.accentClass}`}>
       <div className="diaryTape tapeOne" />
       <div className="diaryTape tapeTwo" />
       <div className="diaryStamp">
@@ -214,8 +398,8 @@ function DiaryImageCard({
 
       <header className="diaryHeader">
         <div>
-          <p>Daily wellness journal</p>
-          <h1>오늘 활력소 건강루틴</h1>
+          <p>{routineInfo.journalLabel}</p>
+          <h1>{routineInfo.title}</h1>
           <span>{userName || "나의 기록"}님의 다이어리 노트</span>
         </div>
         <div className="diaryCharacter">
@@ -230,7 +414,7 @@ function DiaryImageCard({
 
       <section className="diarySummary">
         <div>
-          <strong>{completedCount}/{checkItems.length}</strong>
+          <strong>{completedCount}/{items.length}</strong>
           <span>체크 완료</span>
         </div>
         <div>
@@ -238,8 +422,8 @@ function DiaryImageCard({
           <span>완료율</span>
         </div>
         <div>
-          <strong>{waterCount}/{waterItems.length}</strong>
-          <span>물 체크</span>
+          <strong>{waterCount}/{secondaryItems.length}</strong>
+          <span>{routineInfo.secondarySummary}</span>
         </div>
       </section>
 
@@ -257,14 +441,14 @@ function DiaryImageCard({
 
       <section className="diarySplit">
         <div className="diaryMiniNote">
-          <h2>water</h2>
+          <h2>{routineType === "growth" ? "growth check" : "water"}</h2>
           <p>{selectedRoutine.waterGoal} 목표</p>
-          <strong>{checkedWaterItems.length ? checkedWaterItems.map((item) => item.label).join(" · ") : "아직 물 체크 전"}</strong>
+          <strong>{checkedSecondaryItems.length ? checkedSecondaryItems.map((item) => item.label).join(" · ") : `아직 ${routineInfo.secondarySummary} 전`}</strong>
         </div>
         <div className="diaryMiniNote">
-          <h2>meal flow</h2>
+          <h2>{routineType === "growth" ? "growth flow" : "meal flow"}</h2>
           <p>아침 · 점심 · 오후 · 저녁</p>
-          <strong>{limitText(selectedRoutine.afternoon || selectedRoutine.evening, 46)}</strong>
+          <strong>{limitText(selectedRoutine.closing || selectedRoutine.afternoon || selectedRoutine.evening, 46)}</strong>
         </div>
       </section>
 
@@ -274,22 +458,39 @@ function DiaryImageCard({
       </section>
 
       <footer className="diaryFooter">
-        <strong>오늘도 흐름을 이어간 나를 칭찬해요</strong>
-        <span>오늘 활력소 건강루틴 · saved with care</span>
+        <strong>{routineInfo.finalText}</strong>
+        <span>{routineInfo.title} · saved with care</span>
       </footer>
     </article>
   );
 }
 
-async function ensureDefaultRoutine(uid) {
-  const daysRef = collection(db, "userRoutines", uid, "days");
+async function ensureDefaultRoutine(uid, routineType) {
+  const daysRef = collection(db, "userRoutines", uid, "types", routineType, "days");
   const snapshot = await getDocs(daysRef);
   if (!snapshot.empty) return;
 
   const batch = writeBatch(db);
+  if (routineType === "health") {
+    const legacySnap = await getDocs(collection(db, "userRoutines", uid, "days"));
+    if (!legacySnap.empty) {
+      legacySnap.docs.forEach((routineDoc) => {
+        batch.set(doc(db, "userRoutines", uid, "types", routineType, "days", routineDoc.id), {
+          ...mergeRoutine(routineDoc.id, routineDoc.data(), routineType),
+          routineType,
+          migratedFromLegacy: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+      return;
+    }
+  }
+
   days.forEach((day) => {
-    batch.set(doc(db, "userRoutines", uid, "days", day.id), {
-      ...defaultRoutineForDay(day),
+    batch.set(doc(db, "userRoutines", uid, "types", routineType, "days", day.id), {
+      ...defaultRoutineForDay(day, routineType),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -297,15 +498,18 @@ async function ensureDefaultRoutine(uid) {
   await batch.commit();
 }
 
-function RoutineSettings({ routines, onSave }) {
-  const [drafts, setDrafts] = useState(defaultRoutines);
+function RoutineSettings({ routines, routineType, onChangeRoutineType, onSave }) {
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+  const [drafts, setDrafts] = useState(() => defaultRoutines(routineType));
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
 
   useEffect(() => {
-    setDrafts(Object.fromEntries(days.map((day) => [day.id, mergeRoutine(day.id, routines[day.id])])));
-  }, [routines]);
+    setDrafts(Object.fromEntries(days.map((day) => [day.id, mergeRoutine(day.id, routines[day.id], routineType)])));
+    setSavedMessage("");
+    setSaveErrorMessage("");
+  }, [routines, routineType]);
 
   function updateRoutine(dayId, field, value) {
     setSavedMessage("");
@@ -336,7 +540,7 @@ function RoutineSettings({ routines, onSave }) {
   function resetToDefault() {
     setSavedMessage("");
     setSaveErrorMessage("");
-    setDrafts(defaultRoutines());
+    setDrafts(defaultRoutines(routineType));
   }
 
   return (
@@ -344,7 +548,7 @@ function RoutineSettings({ routines, onSave }) {
       <div className="panelHead">
         <div>
           <p className="sectionLabel"><Settings size={17} /> 내 루틴 설정</p>
-          <h2>월~일 개인 루틴 수정</h2>
+          <h2>월~일 {routineInfo.label} 수정</h2>
         </div>
         <div className="routineSettingsActions">
           <button className="smallButton" onClick={resetToDefault} disabled={saving}>
@@ -356,21 +560,24 @@ function RoutineSettings({ routines, onSave }) {
         </div>
       </div>
 
+      <RoutineTypeTabs value={routineType} onChange={onChangeRoutineType} compact />
+
       {savedMessage ? <p className="statusText successText">{savedMessage}</p> : null}
       {saveErrorMessage ? <p className="statusText errorText">{saveErrorMessage}</p> : null}
 
       <div className="routineEditorGrid">
         {days.map((day) => {
-          const draft = drafts[day.id] || mergeRoutine(day.id);
+          const draft = drafts[day.id] || mergeRoutine(day.id, null, routineType);
           return (
             <article className="routineEditor" key={day.id}>
               <h3>{day.fullLabel}</h3>
               <label>오늘 목표 문구<input value={draft.goalText} onChange={(event) => updateRoutine(day.id, "goalText", event.target.value)} /></label>
               <label>아침<input value={draft.morning} onChange={(event) => updateRoutine(day.id, "morning", event.target.value)} /></label>
-              <label>점심<input value={draft.lunch} onChange={(event) => updateRoutine(day.id, "lunch", event.target.value)} /></label>
+              <label>점심/틈새<input value={draft.lunch} onChange={(event) => updateRoutine(day.id, "lunch", event.target.value)} /></label>
               <label>오후/퇴근 전<input value={draft.afternoon} onChange={(event) => updateRoutine(day.id, "afternoon", event.target.value)} /></label>
               <label>저녁<input value={draft.evening} onChange={(event) => updateRoutine(day.id, "evening", event.target.value)} /></label>
-              <label>물 목표<input value={draft.waterGoal} onChange={(event) => updateRoutine(day.id, "waterGoal", event.target.value)} /></label>
+              <label>마무리<input value={draft.closing || ""} onChange={(event) => updateRoutine(day.id, "closing", event.target.value)} /></label>
+              <label>{routineInfo.secondaryFieldLabel}<input value={draft.waterGoal} onChange={(event) => updateRoutine(day.id, "waterGoal", event.target.value)} /></label>
             </article>
           );
         })}
@@ -382,6 +589,7 @@ function RoutineSettings({ routines, onSave }) {
 function AdminPanel() {
   const [profiles, setProfiles] = useState([]);
   const [selectedUid, setSelectedUid] = useState("");
+  const [adminRoutineType, setAdminRoutineType] = useState("health");
   const [selectedRoutines, setSelectedRoutines] = useState([]);
   const [selectedRecords, setSelectedRecords] = useState([]);
   const [adminWeekStart, setAdminWeekStart] = useState(() => getWeekStart());
@@ -436,14 +644,19 @@ function AdminPanel() {
     if (!uid) return;
     setError("");
     try {
-      const [routinesSnap, recordsSnap] = await Promise.all([
-        getDocs(collection(db, "userRoutines", uid, "days")),
-        getDocs(query(collection(db, "userRoutineRecords", uid, "records"), orderBy("date", "desc"))),
+      const [routinesSnap, recordsSnap, legacyRecordsSnap] = await Promise.all([
+        getDocs(collection(db, "userRoutines", uid, "types", adminRoutineType, "days")),
+        getDocs(query(collection(db, "userRoutineRecords", uid, "types", adminRoutineType, "records"), orderBy("date", "desc"))),
+        adminRoutineType === "health"
+          ? getDocs(query(collection(db, "userRoutineRecords", uid, "records"), orderBy("date", "desc")))
+          : Promise.resolve({ docs: [] }),
       ]);
-      setSelectedRoutines(routinesSnap.docs.map((routineDoc) => ({ id: routineDoc.id, ...routineDoc.data() })));
+      setSelectedRoutines(routinesSnap.docs.map((routineDoc) => ({ id: routineDoc.id, routineType: adminRoutineType, ...routineDoc.data() })));
       setSelectedRecords(
-        recordsSnap.docs
-          .map((recordDoc) => ({ id: recordDoc.id, ...recordDoc.data() }))
+        [
+          ...recordsSnap.docs.map((recordDoc) => ({ id: recordDoc.id, routineType: adminRoutineType, ...recordDoc.data() })),
+          ...legacyRecordsSnap.docs.map((recordDoc) => ({ id: `legacy-${recordDoc.id}`, routineType: "health", ...recordDoc.data() })),
+        ]
           .filter((record) => record.weekStart === adminWeekStart)
       );
     } catch (detailsError) {
@@ -457,9 +670,17 @@ function AdminPanel() {
       const allRecords = [];
       await Promise.all(
         profiles.map(async (profile) => {
-          const recordsSnap = await getDocs(query(collection(db, "userRoutineRecords", profile.uid, "records"), orderBy("date", "desc")));
-          recordsSnap.docs.forEach((recordDoc) => {
-            allRecords.push({ id: recordDoc.id, uid: profile.uid, ...recordDoc.data() });
+          await Promise.all(
+            Object.keys(routineTypes).map(async (type) => {
+              const recordsSnap = await getDocs(query(collection(db, "userRoutineRecords", profile.uid, "types", type, "records"), orderBy("date", "desc")));
+              recordsSnap.docs.forEach((recordDoc) => {
+                allRecords.push({ id: recordDoc.id, uid: profile.uid, routineType: type, ...recordDoc.data() });
+              });
+            })
+          );
+          const legacyRecordsSnap = await getDocs(query(collection(db, "userRoutineRecords", profile.uid, "records"), orderBy("date", "desc")));
+          legacyRecordsSnap.docs.forEach((recordDoc) => {
+            allRecords.push({ id: `legacy-${recordDoc.id}`, uid: profile.uid, routineType: "health", ...recordDoc.data() });
           });
         })
       );
@@ -474,7 +695,7 @@ function AdminPanel() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `health-routine-records-${formatDate(new Date())}.csv`;
+      link.download = `routine-records-${formatDate(new Date())}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -490,7 +711,7 @@ function AdminPanel() {
 
   useEffect(() => {
     loadUserDetails(selectedUid);
-  }, [selectedUid, adminWeekStart]);
+  }, [selectedUid, adminWeekStart, adminRoutineType]);
 
   return (
     <section className="panel adminPanel">
@@ -510,6 +731,8 @@ function AdminPanel() {
       </div>
 
       {error ? <p className="statusText errorText">{error}</p> : null}
+
+      <RoutineTypeTabs value={adminRoutineType} onChange={setAdminRoutineType} compact />
 
       <section className="weekNavigator compact">
         <div>
@@ -555,15 +778,17 @@ function AdminPanel() {
           <div className="adminRoutineList">
             {selectedRoutines.map((routine) => {
               const day = days.find((item) => item.id === routine.dayId);
+              const info = routineTypes[routine.routineType || adminRoutineType] || routineTypes.health;
               return (
                 <article className="recordCard" key={routine.dayId}>
-                  <strong>{day?.fullLabel || routine.dayId}</strong>
+                  <strong>{day?.fullLabel || routine.dayId} · {info.label}</strong>
                   <p>{routine.goalText}</p>
                   <p>아침: {routine.morning}</p>
                   <p>점심: {routine.lunch}</p>
                   <p>오후: {routine.afternoon}</p>
                   <p>저녁: {routine.evening}</p>
-                  <p>물 목표: {routine.waterGoal}</p>
+                  <p>마무리: {routine.closing}</p>
+                  <p>{info.secondaryFieldLabel}: {routine.waterGoal}</p>
                 </article>
               );
             })}
@@ -573,14 +798,17 @@ function AdminPanel() {
           {selectedRecords.length === 0 ? <p className="statusText">선택한 사용자의 기록이 없습니다.</p> : null}
           {selectedRecords.map((record) => {
             const day = days.find((item) => item.id === record.dayId);
+            const items = activeCheckItems(record.routineType || adminRoutineType);
+            const secondaryItems = activeSecondaryItems(record.routineType || adminRoutineType);
+            const info = routineTypes[record.routineType || adminRoutineType] || routineTypes.health;
             return (
               <article className="recordCard" key={record.id}>
                 <div>
-                  <strong>{record.date} · {day?.fullLabel || record.dayId}</strong>
+                  <strong>{record.date} · {day?.fullLabel || record.dayId} · {info.label}</strong>
                   <span>{record.email}</span>
                 </div>
-                <p>체크 {record.completedCount || 0}/{checkItems.length}</p>
-                <p>물 {record.waterCount || 0}/{waterItems.length}</p>
+                <p>체크 {record.completedCount || 0}/{items.length}</p>
+                <p>{info.secondarySummary} {record.waterCount || 0}/{secondaryItems.length}</p>
                 {record.memo ? <p className="memoPreview">{record.memo}</p> : null}
               </article>
             );
@@ -596,9 +824,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [routineType, setRoutineType] = useState("health");
   const [selectedDayId, setSelectedDayId] = useState(getTodayId);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => getWeekStart());
-  const [routines, setRoutines] = useState(defaultRoutines);
+  const [routines, setRoutines] = useState(() => defaultRoutines("health"));
   const [checks, setChecks] = useState({});
   const [waters, setWaters] = useState({});
   const [memo, setMemo] = useState("");
@@ -613,14 +842,18 @@ function App() {
     [selectedDayId]
   );
   const selectedRoutine = useMemo(
-    () => mergeRoutine(selectedDayId, routines[selectedDayId]),
-    [routines, selectedDayId]
+    () => mergeRoutine(selectedDayId, routines[selectedDayId], routineType),
+    [routines, routineType, selectedDayId]
   );
+  const routineInfo = routineTypes[routineType] || routineTypes.health;
+  const currentCheckItems = activeCheckItems(routineType);
+  const secondaryItems = activeSecondaryItems(routineType);
+  const supportItems = activeSupportItems(routineType);
   const selectedWeekEnd = useMemo(() => getWeekEnd(selectedWeekStart), [selectedWeekStart]);
   const selectedDate = useMemo(() => dateForDayId(selectedDayId, selectedWeekStart), [selectedDayId, selectedWeekStart]);
-  const completedCount = checkItems.filter((_, index) => checks[index]).length;
-  const waterCount = waterItems.filter((_, index) => waters[index]).length;
-  const percent = Math.round((completedCount / checkItems.length) * 100);
+  const completedCount = currentCheckItems.filter((_, index) => checks[index]).length;
+  const waterCount = secondaryItems.filter((_, index) => waters[index]).length;
+  const percent = Math.round((completedCount / currentCheckItems.length) * 100);
   const isAdmin = user && adminEmails().includes(user.email?.toLowerCase());
   const canUseApp = Boolean(user && (isAdmin || profile?.status === "approved"));
   const userName = user?.displayName || profile?.displayName || user?.email || "나";
@@ -635,7 +868,7 @@ function App() {
         setChecks({});
         setWaters({});
         setMemo("");
-        setRoutines(defaultRoutines());
+        setRoutines(defaultRoutines(routineType));
         setShowAdmin(false);
         setShowSettings(false);
         return;
@@ -676,18 +909,20 @@ function App() {
   useEffect(() => {
     if (!canUseApp || !user) return undefined;
 
-    ensureDefaultRoutine(user.uid);
+    ensureDefaultRoutine(user.uid, routineType).catch((error) => {
+      setSaveError(error.message || "개인 루틴 기본값을 만들지 못했습니다.");
+    });
 
-    return onSnapshot(collection(db, "userRoutines", user.uid, "days"), (snapshot) => {
-      const nextRoutines = defaultRoutines();
+    return onSnapshot(collection(db, "userRoutines", user.uid, "types", routineType, "days"), (snapshot) => {
+      const nextRoutines = defaultRoutines(routineType);
       snapshot.docs.forEach((routineDoc) => {
-        nextRoutines[routineDoc.id] = mergeRoutine(routineDoc.id, routineDoc.data());
+        nextRoutines[routineDoc.id] = mergeRoutine(routineDoc.id, routineDoc.data(), routineType);
       });
       setRoutines(nextRoutines);
     }, (error) => {
       setSaveError(error.message || "개인 루틴을 불러오지 못했습니다.");
     });
-  }, [canUseApp, user]);
+  }, [canUseApp, routineType, user]);
 
   useEffect(() => {
     if (!canUseApp || !user) return undefined;
@@ -696,9 +931,13 @@ function App() {
     setSaveError("");
 
     return onSnapshot(
-      doc(db, "userRoutineRecords", user.uid, "records", selectedDate),
-      (snapshot) => {
-        const data = snapshot.data();
+      doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
+      async (snapshot) => {
+        let data = snapshot.data();
+        if (!snapshot.exists() && routineType === "health") {
+          const legacySnap = await getDoc(doc(db, "userRoutineRecords", user.uid, "records", selectedDate));
+          data = legacySnap.data();
+        }
         setChecks(normalizeMap(data?.checks));
         setWaters(normalizeMap(data?.waterChecks || data?.waters));
         setMemo(data?.memo || "");
@@ -709,7 +948,7 @@ function App() {
         setRecordLoading(false);
       }
     );
-  }, [canUseApp, selectedDate, user]);
+  }, [canUseApp, routineType, selectedDate, user]);
 
   async function saveRoutineSettings(nextRoutines) {
     if (!canUseApp || !user) {
@@ -723,12 +962,13 @@ function App() {
       const batch = writeBatch(db);
       const mergedRoutines = {};
       days.forEach((day) => {
-        const routine = mergeRoutine(day.id, nextRoutines[day.id]);
+        const routine = mergeRoutine(day.id, nextRoutines[day.id], routineType);
         mergedRoutines[day.id] = routine;
         batch.set(
-          doc(db, "userRoutines", user.uid, "days", day.id),
+          doc(db, "userRoutines", user.uid, "types", routineType, "days", day.id),
           {
             ...routine,
+            routineType,
             updatedAt: serverTimestamp(),
           },
           { merge: true }
@@ -756,9 +996,10 @@ function App() {
 
     try {
       await setDoc(
-        doc(db, "userRoutineRecords", user.uid, "records", selectedDate),
+        doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
         {
           uid: user.uid,
+          routineType,
           email: user.email || "",
           displayName: user.displayName || "",
           date: selectedDate,
@@ -769,9 +1010,9 @@ function App() {
           checks: nextChecks,
           waterChecks: nextWaters,
           memo: nextMemo,
-          completedCount: checkItems.filter((_, index) => nextChecks[index]).length,
-          waterCount: waterItems.filter((_, index) => nextWaters[index]).length,
-          completionRate: Math.round((checkItems.filter((_, index) => nextChecks[index]).length / checkItems.length) * 100),
+          completedCount: currentCheckItems.filter((_, index) => nextChecks[index]).length,
+          waterCount: secondaryItems.filter((_, index) => nextWaters[index]).length,
+          completionRate: Math.round((currentCheckItems.filter((_, index) => nextChecks[index]).length / currentCheckItems.length) * 100),
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -816,6 +1057,16 @@ function App() {
     setMemo("");
   }
 
+  function changeRoutineType(nextType) {
+    setRoutineType(nextType);
+    setRoutines(defaultRoutines(nextType));
+    setChecks({});
+    setWaters({});
+    setMemo("");
+    setRoutineNotice("");
+    setSaveError("");
+  }
+
   function toggleCheck(index) {
     const next = { ...checks, [index]: !checks[index] };
     setChecks(next);
@@ -834,7 +1085,7 @@ function App() {
   }
 
   async function copyToday() {
-    const text = `[${selectedDate} ${selectedDay.fullLabel} 건강루틴 기록]\n완료: ${completedCount}/${checkItems.length}\n물: ${waterCount}/${waterItems.length}\n\n루틴\n- 아침: ${selectedRoutine.morning}\n- 점심: ${selectedRoutine.lunch}\n- 오후/퇴근 전: ${selectedRoutine.afternoon}\n- 저녁: ${selectedRoutine.evening}\n\n메모\n${memo || "없음"}`;
+    const text = `[${selectedDate} ${selectedDay.fullLabel} ${routineInfo.label} 기록]\n완료: ${completedCount}/${currentCheckItems.length}\n${routineInfo.secondarySummary}: ${waterCount}/${secondaryItems.length}\n\n루틴\n- 아침: ${selectedRoutine.morning}\n- 점심/틈새: ${selectedRoutine.lunch}\n- 오후/퇴근 전: ${selectedRoutine.afternoon}\n- 저녁: ${selectedRoutine.evening}\n- 마무리: ${selectedRoutine.closing || "없음"}\n\n메모\n${memo || "없음"}`;
     await navigator.clipboard.writeText(text);
     alert("오늘 기록을 복사했어요.");
   }
@@ -883,7 +1134,7 @@ function App() {
         height: 1920,
         canvasWidth: 1080,
         canvasHeight: 1920,
-        backgroundColor: "#fff7f2",
+      backgroundColor: "#fff7f2",
       });
 
       if (!blob) {
@@ -900,7 +1151,7 @@ function App() {
   }
 
   function resetDay() {
-    if (!confirm(`${selectedDate} 기록을 초기화할까요?`)) return;
+    if (!confirm(`${selectedDate} ${routineInfo.label} 기록을 초기화할까요?`)) return;
     setChecks({});
     setWaters({});
     setMemo("");
@@ -908,18 +1159,19 @@ function App() {
   }
 
   const meals = [
-    { time: "아침", emoji: "🍙", title: selectedRoutine.morning, desc: "" },
-    { time: "점심", emoji: "🥗", title: selectedRoutine.lunch, desc: "" },
-    { time: "오후/퇴근 전", emoji: "🥤", title: selectedRoutine.afternoon, desc: "" },
-    { time: "저녁", emoji: "🌙", title: selectedRoutine.evening, desc: "" },
+    { time: "아침", emoji: routineType === "growth" ? "✍️" : "🍙", title: selectedRoutine.morning, desc: "" },
+    { time: "점심/틈새", emoji: routineType === "growth" ? "📚" : "🥗", title: selectedRoutine.lunch, desc: "" },
+    { time: "오후/퇴근 전", emoji: routineType === "growth" ? "📝" : "🥤", title: selectedRoutine.afternoon, desc: "" },
+    { time: "저녁", emoji: routineType === "growth" ? "🌙" : "🌙", title: selectedRoutine.evening, desc: "" },
+    { time: "마무리", emoji: routineType === "growth" ? "✨" : "🧡", title: selectedRoutine.closing, desc: "" },
   ];
 
   return (
-    <div className={`app theme-${selectedDay.theme}`}>
+    <div className={`app theme-${selectedDay.theme} ${routineInfo.accentClass}`}>
       <header className="hero">
         <div className="heroText">
-          <p className="eyebrow"><Sparkles size={16} /> 나만의 건강 체크 앱</p>
-          <h1>{appInfo.title}</h1>
+          <p className="eyebrow"><Sparkles size={16} /> {routineInfo.eyebrow}</p>
+          <h1>{routineInfo.title}</h1>
           <p>{appInfo.subtitle}</p>
           <div className="authBar">
             {!authReady ? (
@@ -953,7 +1205,14 @@ function App() {
 
       <main className="container">
         {user && isAdmin && showAdmin ? <AdminPanel /> : null}
-        {user && canUseApp && showSettings ? <RoutineSettings routines={routines} onSave={saveRoutineSettings} /> : null}
+        {user && canUseApp && showSettings ? (
+          <RoutineSettings
+            routines={routines}
+            routineType={routineType}
+            onChangeRoutineType={changeRoutineType}
+            onSave={saveRoutineSettings}
+          />
+        ) : null}
         {routineNotice && !showSettings ? <p className="statusText successText mainNotice">{routineNotice}</p> : null}
 
         {!user ? (
@@ -979,6 +1238,8 @@ function App() {
 
         {canUseApp ? (
           <>
+        <RoutineTypeTabs value={routineType} onChange={changeRoutineType} />
+
         <section className="weekNavigator">
           <div>
             <span>{selectedWeekStart === getWeekStart() ? "이번 주 기록" : "선택한 주 기록"}</span>
@@ -1007,10 +1268,10 @@ function App() {
         <section className="todayCard glass">
           <div>
             <p className="sectionLabel"><CalendarDays size={17} /> {selectedDate} 루틴</p>
-            <h2>{selectedDay.fullLabel} · {selectedDay.characterName}</h2>
+            <h2>{selectedDay.fullLabel} · {routineInfo.dayTitle}</h2>
             <p className="motto">"{selectedRoutine.goalText}"</p>
           </div>
-          <div className="oilBadge">{recordLoading ? "불러오는 중" : `물 ${selectedRoutine.waterGoal}`}</div>
+          <div className="oilBadge">{recordLoading ? "불러오는 중" : selectedRoutine.waterGoal}</div>
         </section>
 
         <section className="mealGrid">
@@ -1030,15 +1291,15 @@ function App() {
           <div className="panelHead">
             <div>
               <p className="sectionLabel"><ClipboardCheck size={17} /> 체크리스트</p>
-              <h2>오늘 성공률 {percent}%</h2>
+              <h2>{routineInfo.checkTitle} {percent}%</h2>
             </div>
-            <strong>{completedCount}/{checkItems.length}</strong>
+            <strong>{completedCount}/{currentCheckItems.length}</strong>
           </div>
           <div className="progressTrack">
             <div className="progressBar" style={{ width: `${percent}%` }} />
           </div>
           <div className="checkList">
-            {checkItems.map((item, index) => (
+            {currentCheckItems.map((item, index) => (
               <button
                 className={`checkItem ${checks[index] ? "done" : ""}`}
                 disabled={!user}
@@ -1055,13 +1316,13 @@ function App() {
         <section className="panel">
           <div className="panelHead">
             <div>
-              <p className="sectionLabel"><Droplets size={17} /> 물 목표</p>
-              <h2>{selectedRoutine.waterGoal} 나눠 마시기 체크</h2>
+              <p className="sectionLabel"><Droplets size={17} /> {routineInfo.secondaryLabel}</p>
+              <h2>{selectedRoutine.waterGoal} {routineInfo.secondaryTitle}</h2>
             </div>
-            <strong>{waterCount}/{waterItems.length}</strong>
+            <strong>{waterCount}/{secondaryItems.length}</strong>
           </div>
           <div className="waterGrid">
-            {waterItems.map((item, index) => (
+            {secondaryItems.map((item, index) => (
               <button
                 className={`waterItem ${waters[index] ? "done" : ""}`}
                 disabled={!user}
@@ -1076,25 +1337,25 @@ function App() {
         </section>
 
         <section className="panel">
-          <p className="sectionLabel"><Utensils size={17} /> 비상 보완식</p>
-          <h2>무리하지 않고 막는 선택지</h2>
+          <p className="sectionLabel"><Utensils size={17} /> {routineInfo.supportLabel}</p>
+          <h2>{routineInfo.supportTitle}</h2>
           <div className="chips">
-            {emergencyFoods.map((food) => <span key={food}>{food}</span>)}
+            {supportItems.map((food) => <span key={food}>{food}</span>)}
           </div>
         </section>
 
         <section className="panel">
           <div className="panelHead">
             <div>
-              <p className="sectionLabel">오늘 메모</p>
-              <h2>배고픔·컨디션·실패 포인트 기록</h2>
+              <p className="sectionLabel">{routineInfo.memoLabel}</p>
+              <h2>{routineInfo.memoTitle}</h2>
             </div>
           </div>
           <textarea
             disabled={!user}
             value={memo}
             onChange={(event) => saveMemo(event.target.value)}
-            placeholder="예: 퇴근 후 배고픔 7/10, 아이들 밥 차릴 때 간보기 1번, 물은 1.2L 정도"
+            placeholder={routineInfo.memoPlaceholder}
           />
           <div className="actions">
             <button onClick={copyToday}>오늘 기록 복사</button>
@@ -1114,6 +1375,7 @@ function App() {
                 completedCount={completedCount}
                 memo={memo}
                 percent={percent}
+                routineType={routineType}
                 selectedDate={selectedDate}
                 selectedDay={selectedDay}
                 selectedRoutine={selectedRoutine}
