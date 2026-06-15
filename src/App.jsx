@@ -395,6 +395,23 @@ function DiaryImageCard({
   const checkedRoutineItems = checkedItemsFromMap(items, checks);
   const checkedSecondaryItems = secondaryItems.filter((_, index) => waters[index]);
   const memoText = limitText(memo, 180) || (routineType === "growth" ? "오늘 배운 것과 마음을 짧게 남겨보세요." : "오늘의 컨디션과 마음을 짧게 남겨보세요.");
+  const diaryProfileSrc = routineType === "growth" ? "/growth-diary-profile.png" : "/health-diary-profile.png";
+  const diaryProfileFallbackSrc = routineType === "growth" ? "/growth-main-image.png" : "/main-image.png";
+
+  function handleDiaryProfileError(event) {
+    const image = event.currentTarget;
+    const fallbackStep = image.dataset.fallbackStep || "profile";
+    if (fallbackStep === "profile") {
+      image.dataset.fallbackStep = "character";
+      image.src = selectedDay.characterImage;
+      return;
+    }
+
+    if (fallbackStep === "character") {
+      image.dataset.fallbackStep = "main";
+      image.src = diaryProfileFallbackSrc;
+    }
+  }
 
   return (
     <article className={`diaryImageCard theme-${selectedDay.theme} ${routineInfo.accentClass}`}>
@@ -412,7 +429,11 @@ function DiaryImageCard({
           <span>{userName || "나의 기록"}님의 다이어리 노트</span>
         </div>
         <div className="diaryCharacter">
-          <img src={selectedDay.characterImage} alt="" />
+          <img
+            src={diaryProfileSrc}
+            alt={`${routineInfo.label} 다이어리 프로필 이미지`}
+            onError={handleDiaryProfileError}
+          />
         </div>
       </header>
 
