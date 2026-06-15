@@ -962,9 +962,16 @@ function App() {
     setRoutineNotice("");
     setSaveError("");
 
+    const routinePaths = days.map((day) => `userRoutines/${user.uid}/types/${routineType}/days/${day.id}`);
+
     try {
       const batch = writeBatch(db);
       const mergedRoutines = {};
+      console.info("[routine-editor] saving routines", {
+        uid: user.uid,
+        routineType,
+        paths: routinePaths,
+      });
       days.forEach((day) => {
         const routine = mergeRoutine(day.id, nextRoutines[day.id], routineType);
         mergedRoutines[day.id] = routine;
@@ -979,11 +986,22 @@ function App() {
         );
       });
       await batch.commit();
-      setRoutines(mergedRoutines);
+      const latestSnap = await getDocs(collection(db, "userRoutines", user.uid, "types", routineType, "days"));
+      const latestRoutines = defaultRoutines(routineType);
+      latestSnap.docs.forEach((routineDoc) => {
+        latestRoutines[routineDoc.id] = mergeRoutine(routineDoc.id, routineDoc.data(), routineType);
+      });
+      setRoutines(Object.keys(latestRoutines).length ? latestRoutines : mergedRoutines);
       setRoutineNotice("루틴이 저장됐어요.");
       setShowSettings(false);
     } catch (error) {
       const message = error.message || "루틴을 저장하지 못했습니다.";
+      console.error("[routine-editor] failed to save routines", {
+        uid: user.uid,
+        routineType,
+        paths: routinePaths,
+        error,
+      });
       setSaveError(`저장 실패: ${message}`);
       throw new Error(message);
     }

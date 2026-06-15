@@ -29,7 +29,7 @@ service cloud.firestore {
     }
 
     function isRoutineType(routineType) {
-      return routineType in ["health", "growth"];
+      return routineType == "health" || routineType == "growth";
     }
 
     function isLegacyProfileMigration(uid) {
