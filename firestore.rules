@@ -79,11 +79,21 @@ service cloud.firestore {
         && (isAdmin() || canUseOwnData(uid));
     }
 
+    match /userRoutines/{uid}/types/{routineType}/programs/{programId}/weeks/{weekNumber}/days/{dayId} {
+      allow read, write: if isRoutineType(routineType)
+        && (isAdmin() || canUseOwnData(uid));
+    }
+
     match /userRoutineRecords/{uid}/records/{date} {
       allow read, write: if isAdmin() || canUseOwnData(uid);
     }
 
     match /userRoutineRecords/{uid}/types/{routineType}/records/{date} {
+      allow read, write: if isRoutineType(routineType)
+        && (isAdmin() || canUseOwnData(uid));
+    }
+
+    match /userRoutineRecords/{uid}/types/{routineType}/programs/{programId}/records/{date} {
       allow read, write: if isRoutineType(routineType)
         && (isAdmin() || canUseOwnData(uid));
     }

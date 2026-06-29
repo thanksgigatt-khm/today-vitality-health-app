@@ -206,6 +206,53 @@ button:disabled, input:disabled, textarea:disabled {
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+.programTabs,
+.dietWeekTabs,
+.dietPicker {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0;
+  padding: 7px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.78);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0,0,0,.05);
+}
+
+.programTabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dietWeekTabs,
+.dietPicker {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dietPicker.dayPicker {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.programTabs button,
+.dietWeekTabs button,
+.dietPicker button {
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 8px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.programTabs button.active,
+.dietWeekTabs button.active,
+.dietPicker button.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
 .weekNavigator {
   display: grid;
   justify-items: center;
@@ -830,6 +877,53 @@ textarea:focus {
 .routineEditor input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px var(--accentSoft);
+}
+
+.dietSettingsBlock {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+.dietEditor {
+  margin-top: 12px;
+}
+
+.dietSlotEditorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.dietSlotEditor {
+  padding: 13px;
+  border-radius: 16px;
+  background: #fff8fb;
+  border: 1px solid rgba(0,0,0,.06);
+}
+
+.routineEditor textarea {
+  min-height: 105px;
+  margin-top: 0;
+  border-radius: 13px;
+  font-size: 14px;
+}
+
+.checkboxLabel {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.checkboxLabel input {
+  width: auto;
+}
+
+.mealCard span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .adminList, .adminRecords {
@@ -1607,6 +1701,14 @@ textarea:focus {
 
   .routineEditorGrid {
     grid-template-columns: 1fr;
+  }
+
+  .dietSlotEditorGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dietPicker.dayPicker {
+    grid-template-columns: repeat(7, minmax(42px, 1fr));
   }
 
   .routineSettings .panelHead {

@@ -30,10 +30,15 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { auth, db, googleProvider } from "./firebase";
+import { defaultFourWeekDietDay, defaultFourWeekDietProgram } from "./data/fourWeekDietPlan";
 import { appInfo, checkItems as healthCheckItems, days, emergencyFoods, waterItems as healthWaterItems } from "./data/routineData";
 import "./styles.css";
 
 const dayOrder = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const healthProgramTypes = {
+  routine: { id: "routine", label: "기본 건강루틴" },
+  fourWeekDiet: { id: "fourWeekDiet", label: "4주 식단" },
+};
 const routineTypes = {
   health: {
     id: "health",
@@ -204,6 +209,49 @@ function activeSupportItems(routineType) {
   return routineType === "growth" ? growthIdeas : emergencyFoods;
 }
 
+function dietRecordCollectionRef(uid) {
+  return collection(db, "userRoutineRecords", uid, "types", "health", "programs", "fourWeekDiet", "records");
+}
+
+function dietRecordDocRef(uid, date) {
+  return doc(db, "userRoutineRecords", uid, "types", "health", "programs", "fourWeekDiet", "records", date);
+}
+
+function dietDayDocRef(uid, weekNumber, dayId) {
+  return doc(db, "userRoutines", uid, "types", "health", "programs", "fourWeek", "weeks", String(weekNumber), "days", dayId);
+}
+
+function dietDayCollectionRef(uid, weekNumber) {
+  return collection(db, "userRoutines", uid, "types", "health", "programs", "fourWeek", "weeks", String(weekNumber), "days");
+}
+
+function mergeDietDay(weekNumber, dayId, value) {
+  const base = defaultFourWeekDietDay(weekNumber, dayId);
+  const slotsById = new Map((value?.slots || []).map((slot) => [slot.id, slot]));
+  return {
+    ...base,
+    ...(value || {}),
+    slots: base.slots.map((slot) => ({
+      ...slot,
+      ...(slotsById.get(slot.id) || {}),
+      enabled: slotsById.get(slot.id)?.enabled ?? slot.enabled ?? true,
+    })),
+  };
+}
+
+function dietCheckItemsFromDay(dietDay) {
+  return (dietDay?.slots || [])
+    .filter((slot) => slot.enabled !== false)
+    .map((slot) => `${slot.time} - ${slot.title}: ${String(slot.content || "").split("\n")[0] || "식단 확인"}`);
+}
+
+function dietSlotSummary(dietDay, checks) {
+  return (dietDay?.slots || [])
+    .filter((slot) => slot.enabled !== false)
+    .map((slot, index) => `${slot.time} ${slot.title}: ${checks[index] ? "완료" : "미완료"}`)
+    .join(" / ");
+}
+
 function defaultRoutineForDay(day, routineType = "health") {
   if (routineType === "growth") {
     return {
@@ -324,29 +372,34 @@ function buildWeeklyRows(records, routineType, weekStart) {
   return days.map((day) => {
     const date = dateForDayId(day.id, weekStart);
     const record = recordsByDate.get(date) || {};
+    const isDietRecord = record.programType === "fourWeekDiet";
+    const dietItems = isDietRecord ? dietCheckItemsFromDay(record.dietDay || record.routine) : [];
+    const rowItems = isDietRecord ? dietItems : items;
     const checks = normalizeMap(record.checks);
     const secondaryChecks = normalizeMap(record.waterChecks || record.waters);
     const completedCount = Number.isFinite(record.completedCount)
       ? record.completedCount
-      : items.filter((_, index) => checks[index]).length;
+      : rowItems.filter((_, index) => checks[index]).length;
     const secondaryCount = Number.isFinite(record.waterCount)
       ? record.waterCount
       : secondaryItems.filter((_, index) => secondaryChecks[index]).length;
     const completionRate = Number.isFinite(record.completionRate)
       ? record.completionRate
-      : Math.round((completedCount / items.length) * 100);
+      : Math.round((completedCount / Math.max(rowItems.length, 1)) * 100);
 
     return {
       date,
       dayId: day.id,
       dayLabel: day.fullLabel,
       routineType,
+      programType: record.programType || "routine",
+      weekNumber: record.weekNumber || "",
       completedCount,
       completionRate,
       secondaryCount,
       memo: record.memo || "",
       hasRecord: Boolean(record.date || record.id),
-      checkSummary: checkedSummary(items, checks),
+      checkSummary: isDietRecord ? dietSlotSummary(record.dietDay || record.routine, checks) : checkedSummary(items, checks),
     };
   });
 }
@@ -421,16 +474,17 @@ function buildRoutineCsv(records, profilesByUid) {
 
   const rows = records.map((record) => {
     const checks = normalizeMap(record.checks);
-    const items = activeCheckItems(record.routineType || "health");
+    const isDietRecord = record.programType === "fourWeekDiet";
+    const items = isDietRecord ? dietCheckItemsFromDay(record.dietDay || record.routine) : activeCheckItems(record.routineType || "health");
     const day = days.find((item) => item.id === record.dayId);
     const profile = profilesByUid.get(record.uid);
     const completedCount = items.filter((_, index) => checks[index]).length;
-    const completedRate = `${Math.round((completedCount / items.length) * 100)}%`;
+    const completedRate = `${Math.round((completedCount / Math.max(items.length, 1)) * 100)}%`;
 
     return [
       record.displayName || profile?.displayName || "",
       record.email || profile?.email || "",
-      record.routineType || "health",
+      record.programType === "fourWeekDiet" ? "health/fourWeekDiet" : (record.routineType || "health"),
       record.date || formatDate(record.updatedAt),
       day?.fullLabel || record.dayId || "",
       record.weekStart || "",
@@ -478,10 +532,13 @@ function RoutineTypeTabs({ value, onChange, compact = false }) {
 function DiaryImageCard({
   checks,
   completedCount,
+  dietWeekNumber,
+  isDietProgram,
   memo,
   percent,
   routineType,
   selectedDate,
+  selectedDietDay,
   selectedDay,
   selectedRoutine,
   userName,
@@ -489,8 +546,8 @@ function DiaryImageCard({
   waters,
 }) {
   const routineInfo = routineTypes[routineType] || routineTypes.health;
-  const items = activeCheckItems(routineType);
-  const secondaryItems = activeSecondaryItems(routineType);
+  const items = isDietProgram ? dietCheckItemsFromDay(selectedDietDay) : activeCheckItems(routineType);
+  const secondaryItems = isDietProgram ? [] : activeSecondaryItems(routineType);
   const checkedRoutineItems = checkedItemsFromMap(items, checks);
   const checkedSecondaryItems = secondaryItems.filter((_, index) => waters[index]);
   const memoText = limitText(memo, 180) || (routineType === "growth" ? "오늘 배운 것과 마음을 짧게 남겨보세요." : "오늘의 컨디션과 마음을 짧게 남겨보세요.");
@@ -537,8 +594,8 @@ function DiaryImageCard({
       </header>
 
       <section className="diaryGoalNote">
-        <span>today's little promise</span>
-        <strong>{limitText(selectedRoutine.goalText, 54) || "오늘도 흐름을 이어가요."}</strong>
+        <span>{isDietProgram ? `4주 식단 · ${dietWeekNumber}주차` : "today's little promise"}</span>
+        <strong>{isDietProgram ? `물 섭취 목표 ${selectedDietDay.totalDrink}` : (limitText(selectedRoutine.goalText, 54) || "오늘도 흐름을 이어가요.")}</strong>
       </section>
 
       <section className="diarySummary">
@@ -551,8 +608,8 @@ function DiaryImageCard({
           <span>완료율</span>
         </div>
         <div>
-          <strong>{waterCount}/{secondaryItems.length}</strong>
-          <span>{routineInfo.secondarySummary}</span>
+          <strong>{isDietProgram ? selectedDietDay.totalDrink : `${waterCount}/${secondaryItems.length}`}</strong>
+          <span>{isDietProgram ? "음료 목표" : routineInfo.secondarySummary}</span>
         </div>
       </section>
 
@@ -570,14 +627,14 @@ function DiaryImageCard({
 
       <section className="diarySplit">
         <div className="diaryMiniNote">
-          <h2>{routineType === "growth" ? "growth check" : "water"}</h2>
-          <p>{selectedRoutine.waterGoal} 목표</p>
-          <strong>{checkedSecondaryItems.length ? checkedSecondaryItems.map((item) => item.label).join(" · ") : `아직 ${routineInfo.secondarySummary} 전`}</strong>
+          <h2>{isDietProgram ? "drink goal" : (routineType === "growth" ? "growth check" : "water")}</h2>
+          <p>{isDietProgram ? "총 음료 목표" : `${selectedRoutine.waterGoal} 목표`}</p>
+          <strong>{isDietProgram ? selectedDietDay.totalDrink : (checkedSecondaryItems.length ? checkedSecondaryItems.map((item) => item.label).join(" · ") : `아직 ${routineInfo.secondarySummary} 전`)}</strong>
         </div>
         <div className="diaryMiniNote">
-          <h2>{routineType === "growth" ? "growth flow" : "meal flow"}</h2>
-          <p>아침 · 점심 · 오후 · 저녁</p>
-          <strong>{limitText(selectedRoutine.closing || selectedRoutine.afternoon || selectedRoutine.evening, 46)}</strong>
+          <h2>{isDietProgram ? "diet flow" : (routineType === "growth" ? "growth flow" : "meal flow")}</h2>
+          <p>{isDietProgram ? "완료한 시간별 식단" : "아침 · 점심 · 오후 · 저녁"}</p>
+          <strong>{isDietProgram ? `${completedCount}/${items.length}개 완료` : limitText(selectedRoutine.closing || selectedRoutine.afternoon || selectedRoutine.evening, 46)}</strong>
         </div>
       </section>
 
@@ -750,9 +807,12 @@ async function ensureDefaultRoutine(uid, routineType) {
   await batch.commit();
 }
 
-function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, onSave }) {
+function RoutineSettings({ dietProgram, routines, routineType, onChangeRoutineType, onClose, onSave, onSaveDietProgram }) {
   const routineInfo = routineTypes[routineType] || routineTypes.health;
   const [drafts, setDrafts] = useState(() => defaultRoutines(routineType));
+  const [dietDrafts, setDietDrafts] = useState(() => defaultFourWeekDietProgram());
+  const [dietWeek, setDietWeek] = useState(1);
+  const [dietDayId, setDietDayId] = useState("mon");
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
@@ -765,6 +825,10 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
     setSaveErrorMessage("");
   }, [routines, routineType]);
 
+  useEffect(() => {
+    setDietDrafts(dietProgram || defaultFourWeekDietProgram());
+  }, [dietProgram]);
+
   function updateRoutine(dayId, field, value) {
     setIsDirty(true);
     setSavedMessage("");
@@ -776,6 +840,43 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
         [field]: value,
       },
     }));
+  }
+
+  function updateDietDay(field, value) {
+    setIsDirty(true);
+    setSavedMessage("");
+    setSaveErrorMessage("");
+    setDietDrafts((current) => ({
+      ...current,
+      [dietWeek]: {
+        ...current[dietWeek],
+        [dietDayId]: {
+          ...current[dietWeek][dietDayId],
+          [field]: value,
+        },
+      },
+    }));
+  }
+
+  function updateDietSlot(slotIndex, field, value) {
+    setIsDirty(true);
+    setSavedMessage("");
+    setSaveErrorMessage("");
+    setDietDrafts((current) => {
+      const dayDraft = current[dietWeek][dietDayId];
+      return {
+        ...current,
+        [dietWeek]: {
+          ...current[dietWeek],
+          [dietDayId]: {
+            ...dayDraft,
+            slots: dayDraft.slots.map((slot, index) => (
+              index === slotIndex ? { ...slot, [field]: value } : slot
+            )),
+          },
+        },
+      };
+    });
   }
 
   async function saveAll() {
@@ -798,6 +899,34 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
     setSavedMessage("");
     setSaveErrorMessage("");
     setDrafts(defaultRoutines(routineType));
+  }
+
+  async function saveDietProgram() {
+    setSaving(true);
+    setSavedMessage("");
+    setSaveErrorMessage("");
+    try {
+      await onSaveDietProgram(dietDrafts);
+      setIsDirty(false);
+      setSavedMessage("4주 식단이 저장됐어요.");
+    } catch (error) {
+      setSaveErrorMessage(`저장 실패: ${error.message || "알 수 없는 오류"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetDietDayToDefault() {
+    setIsDirty(true);
+    setSavedMessage("");
+    setSaveErrorMessage("");
+    setDietDrafts((current) => ({
+      ...current,
+      [dietWeek]: {
+        ...current[dietWeek],
+        [dietDayId]: defaultFourWeekDietDay(dietWeek, dietDayId),
+      },
+    }));
   }
 
   function closeSettings() {
@@ -860,6 +989,79 @@ function RoutineSettings({ routines, routineType, onChangeRoutineType, onClose, 
           );
         })}
       </div>
+
+      {routineType === "health" ? (
+        <section className="dietSettingsBlock">
+          <div className="panelHead">
+            <div>
+              <p className="sectionLabel"><Utensils size={17} /> 4주 식단</p>
+              <h2>주차·요일별 식단 체크리스트</h2>
+              <p className="motto">총 음료 목표와 6개 시간대 항목을 직접 수정할 수 있어요.</p>
+            </div>
+            <div className="routineSettingsActions">
+              <button className="smallButton subtleButton" onClick={resetDietDayToDefault} disabled={saving}>
+                선택 요일 기본값
+              </button>
+              <button className="smallButton" onClick={saveDietProgram} disabled={saving}>
+                {saving ? "저장 중..." : "4주 식단 저장"}
+              </button>
+            </div>
+          </div>
+
+          <div className="dietPicker">
+            {[1, 2, 3, 4].map((weekNumber) => (
+              <button
+                type="button"
+                key={weekNumber}
+                className={dietWeek === weekNumber ? "active" : ""}
+                onClick={() => setDietWeek(weekNumber)}
+              >
+                {weekNumber}주차
+              </button>
+            ))}
+          </div>
+
+          <div className="dietPicker dayPicker">
+            {days.map((day) => (
+              <button
+                type="button"
+                key={day.id}
+                className={dietDayId === day.id ? "active" : ""}
+                onClick={() => setDietDayId(day.id)}
+              >
+                {day.label}
+              </button>
+            ))}
+          </div>
+
+          {(() => {
+            const dietDay = dietDrafts[dietWeek]?.[dietDayId] || defaultFourWeekDietDay(dietWeek, dietDayId);
+            return (
+              <article className="routineEditor dietEditor">
+                <h3>{dietWeek}주차 · {days.find((day) => day.id === dietDayId)?.fullLabel}</h3>
+                <label>총 음료 목표<input value={dietDay.totalDrink || ""} onChange={(event) => updateDietDay("totalDrink", event.target.value)} /></label>
+                <div className="dietSlotEditorGrid">
+                  {dietDay.slots.map((slot, index) => (
+                    <div className="dietSlotEditor" key={slot.id}>
+                      <label className="checkboxLabel">
+                        <input
+                          type="checkbox"
+                          checked={slot.enabled !== false}
+                          onChange={(event) => updateDietSlot(index, "enabled", event.target.checked)}
+                        />
+                        체크 항목 표시
+                      </label>
+                      <label>시간<input value={slot.time || ""} onChange={(event) => updateDietSlot(index, "time", event.target.value)} /></label>
+                      <label>제목<input value={slot.title || ""} onChange={(event) => updateDietSlot(index, "title", event.target.value)} /></label>
+                      <label>상세 식단 내용<textarea value={slot.content || ""} onChange={(event) => updateDietSlot(index, "content", event.target.value)} /></label>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+          })()}
+        </section>
+      ) : null}
     </section>
   );
 }
@@ -922,11 +1124,14 @@ function AdminPanel() {
     if (!uid) return;
     setError("");
     try {
-      const [routinesSnap, recordsSnap, legacyRecordsSnap] = await Promise.all([
+      const [routinesSnap, recordsSnap, legacyRecordsSnap, dietRecordsSnap] = await Promise.all([
         getDocs(collection(db, "userRoutines", uid, "types", adminRoutineType, "days")),
         getDocs(query(collection(db, "userRoutineRecords", uid, "types", adminRoutineType, "records"), orderBy("date", "desc"))),
         adminRoutineType === "health"
           ? getDocs(query(collection(db, "userRoutineRecords", uid, "records"), orderBy("date", "desc")))
+          : Promise.resolve({ docs: [] }),
+        adminRoutineType === "health"
+          ? getDocs(query(collection(db, "userRoutineRecords", uid, "types", "health", "programs", "fourWeekDiet", "records"), orderBy("date", "desc")))
           : Promise.resolve({ docs: [] }),
       ]);
       setSelectedRoutines(routinesSnap.docs.map((routineDoc) => ({ id: routineDoc.id, routineType: adminRoutineType, ...routineDoc.data() })));
@@ -934,6 +1139,7 @@ function AdminPanel() {
         [
           ...recordsSnap.docs.map((recordDoc) => ({ id: recordDoc.id, routineType: adminRoutineType, ...recordDoc.data() })),
           ...legacyRecordsSnap.docs.map((recordDoc) => ({ id: `legacy-${recordDoc.id}`, routineType: "health", ...recordDoc.data() })),
+          ...dietRecordsSnap.docs.map((recordDoc) => ({ id: `fourWeekDiet-${recordDoc.id}`, routineType: "health", programType: "fourWeekDiet", ...recordDoc.data() })),
         ]
           .filter((record) => record.weekStart === adminWeekStart)
       );
@@ -956,6 +1162,10 @@ function AdminPanel() {
               });
             })
           );
+          const dietRecordsSnap = await getDocs(query(collection(db, "userRoutineRecords", profile.uid, "types", "health", "programs", "fourWeekDiet", "records"), orderBy("date", "desc")));
+          dietRecordsSnap.docs.forEach((recordDoc) => {
+            allRecords.push({ id: `fourWeekDiet-${recordDoc.id}`, uid: profile.uid, routineType: "health", programType: "fourWeekDiet", ...recordDoc.data() });
+          });
           const legacyRecordsSnap = await getDocs(query(collection(db, "userRoutineRecords", profile.uid, "records"), orderBy("date", "desc")));
           legacyRecordsSnap.docs.forEach((recordDoc) => {
             allRecords.push({ id: `legacy-${recordDoc.id}`, uid: profile.uid, routineType: "health", ...recordDoc.data() });
@@ -1082,17 +1292,18 @@ function AdminPanel() {
           {selectedRecords.length === 0 ? <p className="statusText">선택한 사용자의 기록이 없습니다.</p> : null}
           {selectedRecords.map((record) => {
             const day = days.find((item) => item.id === record.dayId);
-            const items = activeCheckItems(record.routineType || adminRoutineType);
+            const isDietRecord = record.programType === "fourWeekDiet";
+            const items = isDietRecord ? dietCheckItemsFromDay(record.dietDay || record.routine) : activeCheckItems(record.routineType || adminRoutineType);
             const secondaryItems = activeSecondaryItems(record.routineType || adminRoutineType);
             const info = routineTypes[record.routineType || adminRoutineType] || routineTypes.health;
             return (
               <article className="recordCard" key={record.id}>
                 <div>
-                  <strong>{record.date} · {day?.fullLabel || record.dayId} · {info.label}</strong>
+                  <strong>{record.date} · {day?.fullLabel || record.dayId} · {isDietRecord ? `4주 식단 ${record.weekNumber || ""}주차` : info.label}</strong>
                   <span>{record.email}</span>
                 </div>
                 <p>체크 {record.completedCount || 0}/{items.length}</p>
-                <p>{info.secondarySummary} {record.waterCount || 0}/{secondaryItems.length}</p>
+                <p>{isDietRecord ? `총 음료 목표 ${record.totalDrinkTarget || ""}` : `${info.secondarySummary} ${record.waterCount || 0}/${secondaryItems.length}`}</p>
                 {record.memo ? <p className="memoPreview">{record.memo}</p> : null}
               </article>
             );
@@ -1111,9 +1322,12 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [routineType, setRoutineType] = useState("health");
+  const [healthProgram, setHealthProgram] = useState("routine");
+  const [dietWeekNumber, setDietWeekNumber] = useState(1);
   const [selectedDayId, setSelectedDayId] = useState(getTodayId);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => getWeekStart());
   const [routines, setRoutines] = useState(() => defaultRoutines("health"));
+  const [dietProgram, setDietProgram] = useState(() => defaultFourWeekDietProgram());
   const [checks, setChecks] = useState({});
   const [waters, setWaters] = useState({});
   const [memo, setMemo] = useState("");
@@ -1140,13 +1354,18 @@ function App() {
     () => mergeRoutine(selectedDayId, routines[selectedDayId], routineType),
     [routines, routineType, selectedDayId]
   );
+  const isDietProgram = routineType === "health" && healthProgram === "fourWeekDiet";
+  const selectedDietDay = useMemo(
+    () => mergeDietDay(dietWeekNumber, selectedDayId, dietProgram[dietWeekNumber]?.[selectedDayId]),
+    [dietProgram, dietWeekNumber, selectedDayId]
+  );
   const routineInfo = routineTypes[routineType] || routineTypes.health;
   const heroImageSrc = routineType === "growth" ? "/growth-main-image.png" : "/main-image.png";
   const heroImageAlt = routineType === "growth"
     ? "오늘 활력소 성장루틴 메인 이미지"
     : "오늘 활력소 건강루틴 메인 이미지";
-  const currentCheckItems = activeCheckItems(routineType);
-  const secondaryItems = activeSecondaryItems(routineType);
+  const currentCheckItems = isDietProgram ? dietCheckItemsFromDay(selectedDietDay) : activeCheckItems(routineType);
+  const secondaryItems = isDietProgram ? [] : activeSecondaryItems(routineType);
   const supportItems = activeSupportItems(routineType);
   const selectedWeekEnd = useMemo(() => getWeekEnd(selectedWeekStart), [selectedWeekStart]);
   const selectedDate = useMemo(() => dateForDayId(selectedDayId, selectedWeekStart), [selectedDayId, selectedWeekStart]);
@@ -1158,7 +1377,7 @@ function App() {
   const weeklySummary = useMemo(() => summarizeWeeklyRows(weeklyRows), [weeklyRows]);
   const completedCount = currentCheckItems.filter((_, index) => checks[index]).length;
   const waterCount = secondaryItems.filter((_, index) => waters[index]).length;
-  const percent = Math.round((completedCount / currentCheckItems.length) * 100);
+  const percent = Math.round((completedCount / Math.max(currentCheckItems.length, 1)) * 100);
   const isAdmin = user && adminEmails().includes(user.email?.toLowerCase());
   const canUseApp = Boolean(user && (isAdmin || (profile && profile.status !== "blocked")));
   const userName = user?.displayName || profile?.displayName || user?.email || "나";
@@ -1179,6 +1398,8 @@ function App() {
         setShowWeeklyReport(false);
         setWeeklyRecords([]);
         setRoutines(defaultRoutines(routineType));
+        setDietProgram(defaultFourWeekDietProgram());
+        setHealthProgram("routine");
         setShowAdmin(false);
         setShowSettings(false);
         return;
@@ -1244,6 +1465,32 @@ function App() {
   }, [canUseApp, routineType, user]);
 
   useEffect(() => {
+    if (!canUseApp || !user || routineType !== "health") return undefined;
+
+    let active = true;
+    async function loadDietProgram() {
+      const nextProgram = defaultFourWeekDietProgram();
+      try {
+        await Promise.all([1, 2, 3, 4].map(async (weekNumber) => {
+          const snapshot = await getDocs(dietDayCollectionRef(user.uid, weekNumber));
+          snapshot.docs.forEach((dietDoc) => {
+            nextProgram[weekNumber][dietDoc.id] = mergeDietDay(weekNumber, dietDoc.id, dietDoc.data());
+          });
+        }));
+        if (active) setDietProgram(nextProgram);
+      } catch (error) {
+        if (active) setSaveError(friendlyErrorMessage(error, "4주 식단을 불러오지 못했습니다."));
+      }
+    }
+
+    loadDietProgram();
+
+    return () => {
+      active = false;
+    };
+  }, [canUseApp, routineType, user]);
+
+  useEffect(() => {
     if (!canUseApp || !user) return undefined;
 
     let active = true;
@@ -1256,13 +1503,20 @@ function App() {
     setHasUnsavedChanges(false);
 
     async function loadRecord() {
-      const recordPath = `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
+      const recordPath = isDietProgram
+        ? `userRoutineRecords/${user.uid}/types/health/programs/fourWeekDiet/records/${selectedDate}`
+        : `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
       try {
-        const snapshot = await getDoc(doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate));
+        const snapshot = await getDoc(isDietProgram
+          ? dietRecordDocRef(user.uid, selectedDate)
+          : doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate));
         let data = snapshot.data();
-        if (!snapshot.exists() && routineType === "health") {
+        if (!snapshot.exists() && routineType === "health" && !isDietProgram) {
           const legacySnap = await getDoc(doc(db, "userRoutineRecords", user.uid, "records", selectedDate));
           data = legacySnap.data();
+        }
+        if (isDietProgram && data?.weekNumber && Number(data.weekNumber) !== Number(dietWeekNumber)) {
+          data = null;
         }
         if (!active) return;
         setChecks(normalizeMap(data?.checks));
@@ -1283,7 +1537,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [canUseApp, routineType, selectedDate, user]);
+  }, [canUseApp, dietWeekNumber, isDietProgram, routineType, selectedDate, user]);
 
   async function saveRoutineSettings(nextRoutines) {
     if (!canUseApp || !user) {
@@ -1337,13 +1591,51 @@ function App() {
     }
   }
 
+  async function saveDietProgramSettings(nextDietProgram) {
+    if (!canUseApp || !user) {
+      throw new Error("로그인한 사용자만 4주 식단을 저장할 수 있습니다.");
+    }
+
+    setRoutineNotice("");
+    setSaveError("");
+
+    try {
+      const batch = writeBatch(db);
+      [1, 2, 3, 4].forEach((weekNumber) => {
+        days.forEach((day) => {
+          const dietDay = mergeDietDay(weekNumber, day.id, nextDietProgram[weekNumber]?.[day.id]);
+          batch.set(
+            dietDayDocRef(user.uid, weekNumber, day.id),
+            {
+              ...dietDay,
+              weekNumber,
+              dayId: day.id,
+              programType: "fourWeekDiet",
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        });
+      });
+      await batch.commit();
+      setDietProgram(nextDietProgram);
+      setRoutineNotice("4주 식단이 저장됐어요.");
+    } catch (error) {
+      const message = friendlyErrorMessage(error, "4주 식단을 저장하지 못했습니다.");
+      setSaveError(`저장 실패: ${message}`);
+      throw new Error(message);
+    }
+  }
+
   async function saveRecord(nextValues = {}) {
     if (!canUseApp || !user) return false;
 
     const nextChecks = normalizeMap(nextValues.checks ?? checks);
     const nextWaters = normalizeMap(nextValues.waters ?? waters);
     const nextMemo = nextValues.memo ?? memo;
-    const recordPath = `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
+    const recordPath = isDietProgram
+      ? `userRoutineRecords/${user.uid}/types/health/programs/fourWeekDiet/records/${selectedDate}`
+      : `userRoutineRecords/${user.uid}/types/${routineType}/records/${selectedDate}`;
 
     setRecordSaving(true);
     setRecordSaveMessage("");
@@ -1356,11 +1648,16 @@ function App() {
         path: recordPath,
         date: selectedDate,
       });
+      const completed = currentCheckItems.filter((_, index) => nextChecks[index]).length;
       await setDoc(
-        doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
+        isDietProgram
+          ? dietRecordDocRef(user.uid, selectedDate)
+          : doc(db, "userRoutineRecords", user.uid, "types", routineType, "records", selectedDate),
         {
           uid: user.uid,
           routineType,
+          programType: isDietProgram ? "fourWeekDiet" : "routine",
+          weekNumber: isDietProgram ? dietWeekNumber : null,
           email: user.email || "",
           displayName: user.displayName || "",
           date: selectedDate,
@@ -1368,13 +1665,16 @@ function App() {
           weekStart: selectedWeekStart,
           weekEnd: selectedWeekEnd,
           routine: selectedRoutine,
+          dietDay: isDietProgram ? selectedDietDay : null,
           checks: nextChecks,
+          slotChecks: isDietProgram ? nextChecks : null,
           waterChecks: nextWaters,
-          waterGoal: selectedRoutine.waterGoal,
+          waterGoal: isDietProgram ? selectedDietDay.totalDrink : selectedRoutine.waterGoal,
+          totalDrinkTarget: isDietProgram ? selectedDietDay.totalDrink : null,
           memo: nextMemo,
-          completedCount: currentCheckItems.filter((_, index) => nextChecks[index]).length,
+          completedCount: completed,
           waterCount: secondaryItems.filter((_, index) => nextWaters[index]).length,
-          completionRate: Math.round((currentCheckItems.filter((_, index) => nextChecks[index]).length / currentCheckItems.length) * 100),
+          completionRate: Math.round((completed / Math.max(currentCheckItems.length, 1)) * 100),
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -1446,15 +1746,21 @@ function App() {
 
   async function loadWeeklyRecords() {
     if (!canUseApp || !user) return [];
-    const recordsPath = `userRoutineRecords/${user.uid}/types/${routineType}/records`;
+    const recordsPath = isDietProgram
+      ? `userRoutineRecords/${user.uid}/types/health/programs/fourWeekDiet/records`
+      : `userRoutineRecords/${user.uid}/types/${routineType}/records`;
     setWeeklyReportLoading(true);
     setSaveError("");
 
     try {
-      const recordsSnap = await getDocs(query(collection(db, "userRoutineRecords", user.uid, "types", routineType, "records"), orderBy("date", "asc")));
+      const recordsSnap = await getDocs(query(
+        isDietProgram ? dietRecordCollectionRef(user.uid) : collection(db, "userRoutineRecords", user.uid, "types", routineType, "records"),
+        orderBy("date", "asc")
+      ));
       const rows = recordsSnap.docs
         .map((recordDoc) => ({ id: recordDoc.id, ...recordDoc.data() }))
-        .filter((record) => record.weekStart === selectedWeekStart);
+        .filter((record) => record.weekStart === selectedWeekStart)
+        .filter((record) => !isDietProgram || Number(record.weekNumber) === Number(dietWeekNumber));
       setWeeklyRecords(rows);
       return rows;
     } catch (error) {
@@ -1553,10 +1859,28 @@ function App() {
     if (nextType === routineType) return;
     requestNavigation(() => {
       setRoutineType(nextType);
+      setHealthProgram("routine");
       setRoutines(defaultRoutines(nextType));
       setShowWeeklyReport(false);
       setRoutineNotice("");
       setSaveError("");
+    });
+  }
+
+  function changeHealthProgram(nextProgram) {
+    if (!healthProgramTypes[nextProgram] || nextProgram === healthProgram) return;
+    requestNavigation(() => {
+      setHealthProgram(nextProgram);
+      setShowWeeklyReport(false);
+      setSaveError("");
+    });
+  }
+
+  function changeDietWeek(nextWeekNumber) {
+    if (nextWeekNumber === dietWeekNumber) return;
+    requestNavigation(() => {
+      setDietWeekNumber(nextWeekNumber);
+      setShowWeeklyReport(false);
     });
   }
 
@@ -1588,9 +1912,12 @@ function App() {
   }
 
   async function copyToday() {
+    const dietText = isDietProgram
+      ? `[${selectedDate} ${selectedDay.fullLabel} 4주 식단 · ${dietWeekNumber}주차]\n완료: ${completedCount}/${currentCheckItems.length}\n총 음료 목표: ${selectedDietDay.totalDrink}\n\n식단 체크\n${selectedDietDay.slots.filter((slot) => slot.enabled !== false).map((slot, index) => `- ${checks[index] ? "완료" : "미완료"} ${slot.time} ${slot.title}: ${slot.content}`).join("\n")}\n\n메모\n${memo || "없음"}`
+      : "";
     const text = `[${selectedDate} ${selectedDay.fullLabel} ${routineInfo.label} 기록]\n완료: ${completedCount}/${currentCheckItems.length}\n${routineInfo.secondarySummary}: ${waterCount}/${secondaryItems.length}\n\n루틴\n- 아침: ${selectedRoutine.morning}\n- 점심/틈새: ${selectedRoutine.lunch}\n- 오후/퇴근 전: ${selectedRoutine.afternoon}\n- 저녁: ${selectedRoutine.evening}\n- 마무리: ${selectedRoutine.closing || "없음"}\n\n메모\n${memo || "없음"}`;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(isDietProgram ? dietText : text);
       showRecordMessage("텍스트 기록이 복사됐어요.");
     } catch (error) {
       setSaveError(friendlyErrorMessage(error, "텍스트 기록을 복사하지 못했습니다."));
@@ -1671,13 +1998,20 @@ function App() {
     markRecordDirty();
   }
 
-  const meals = [
+  const dietMeals = selectedDietDay.slots.map((slot) => ({
+    time: slot.time,
+    emoji: slot.id.includes("drink") || slot.id === "wake" ? "💧" : "🍽️",
+    title: slot.title,
+    desc: slot.content,
+  }));
+  const routineMeals = [
     { time: "아침", emoji: routineType === "growth" ? "✍️" : "🍙", title: selectedRoutine.morning, desc: "" },
     { time: "점심/틈새", emoji: routineType === "growth" ? "📚" : "🥗", title: selectedRoutine.lunch, desc: "" },
     { time: "오후/퇴근 전", emoji: routineType === "growth" ? "📝" : "🥤", title: selectedRoutine.afternoon, desc: "" },
     { time: "저녁", emoji: routineType === "growth" ? "🌙" : "🌙", title: selectedRoutine.evening, desc: "" },
     { time: "마무리", emoji: routineType === "growth" ? "✨" : "🧡", title: selectedRoutine.closing, desc: "" },
   ];
+  const meals = isDietProgram ? dietMeals : routineMeals;
 
   return (
     <div className={`app theme-${selectedDay.theme} ${routineInfo.accentClass}`}>
@@ -1720,11 +2054,13 @@ function App() {
         {user && isAdmin && showAdmin ? <AdminPanel /> : null}
         {user && canUseApp && showSettings ? (
           <RoutineSettings
+            dietProgram={dietProgram}
             routines={routines}
             routineType={routineType}
             onChangeRoutineType={changeRoutineType}
             onClose={() => setShowSettings(false)}
             onSave={saveRoutineSettings}
+            onSaveDietProgram={saveDietProgramSettings}
           />
         ) : null}
         {routineNotice && !showSettings ? <p className="statusText successText mainNotice">{routineNotice}</p> : null}
@@ -1746,6 +2082,36 @@ function App() {
         {canUseApp ? (
           <>
         <RoutineTypeTabs value={routineType} onChange={changeRoutineType} />
+
+        {routineType === "health" ? (
+          <section className="programTabs" aria-label="건강루틴 프로그램 선택">
+            {Object.values(healthProgramTypes).map((program) => (
+              <button
+                type="button"
+                key={program.id}
+                className={healthProgram === program.id ? "active" : ""}
+                onClick={() => changeHealthProgram(program.id)}
+              >
+                {program.label}
+              </button>
+            ))}
+          </section>
+        ) : null}
+
+        {isDietProgram ? (
+          <section className="dietWeekTabs" aria-label="4주 식단 주차 선택">
+            {[1, 2, 3, 4].map((weekNumber) => (
+              <button
+                type="button"
+                key={weekNumber}
+                className={dietWeekNumber === weekNumber ? "active" : ""}
+                onClick={() => changeDietWeek(weekNumber)}
+              >
+                {weekNumber}주차
+              </button>
+            ))}
+          </section>
+        ) : null}
 
         <section className="weekNavigator">
           <div>
@@ -1775,10 +2141,10 @@ function App() {
         <section className="todayCard glass">
           <div>
             <p className="sectionLabel"><CalendarDays size={17} /> {selectedDate} 루틴</p>
-            <h2>{selectedDay.fullLabel} · {routineInfo.dayTitle}</h2>
-            <p className="motto">"{selectedRoutine.goalText}"</p>
+            <h2>{selectedDay.fullLabel} · {isDietProgram ? `4주 식단 ${dietWeekNumber}주차` : routineInfo.dayTitle}</h2>
+            <p className="motto">"{isDietProgram ? "오늘 식단 흐름을 차분히 체크해요." : selectedRoutine.goalText}"</p>
           </div>
-          <div className="oilBadge">{recordLoading ? "불러오는 중" : selectedRoutine.waterGoal}</div>
+          <div className="oilBadge">{recordLoading ? "불러오는 중" : (isDietProgram ? selectedDietDay.totalDrink : selectedRoutine.waterGoal)}</div>
         </section>
 
         <section className={`recordSavePanel ${hasUnsavedChanges ? "dirty" : ""}`}>
@@ -1823,8 +2189,8 @@ function App() {
         <section className="panel">
           <div className="panelHead">
             <div>
-              <p className="sectionLabel"><ClipboardCheck size={17} /> 체크리스트</p>
-              <h2>{routineInfo.checkTitle} {percent}%</h2>
+              <p className="sectionLabel"><ClipboardCheck size={17} /> {isDietProgram ? "4주 식단 체크리스트" : "체크리스트"}</p>
+              <h2>{isDietProgram ? "시간별 식단 완료율" : routineInfo.checkTitle} {percent}%</h2>
             </div>
             <strong>{completedCount}/{currentCheckItems.length}</strong>
           </div>
@@ -1836,7 +2202,7 @@ function App() {
               <button
                 className={`checkItem ${checks[index] ? "done" : ""}`}
                 disabled={!user}
-                key={item}
+                key={`${index}-${item}`}
                 onClick={() => toggleCheck(index)}
               >
                 <CheckCircle2 size={22} />
@@ -1846,6 +2212,7 @@ function App() {
           </div>
         </section>
 
+        {!isDietProgram ? (
         <section className="panel">
           <div className="panelHead">
             <div>
@@ -1868,7 +2235,9 @@ function App() {
             ))}
           </div>
         </section>
+        ) : null}
 
+        {!isDietProgram ? (
         <section className="panel">
           <p className="sectionLabel"><Utensils size={17} /> {routineInfo.supportLabel}</p>
           <h2>{routineInfo.supportTitle}</h2>
@@ -1876,6 +2245,7 @@ function App() {
             {supportItems.map((food) => <span key={food}>{food}</span>)}
           </div>
         </section>
+        ) : null}
 
         <section className="panel">
           <div className="panelHead">
@@ -1928,10 +2298,13 @@ function App() {
               <DiaryImageCard
                 checks={checks}
                 completedCount={completedCount}
+                dietWeekNumber={dietWeekNumber}
+                isDietProgram={isDietProgram}
                 memo={memo}
                 percent={percent}
                 routineType={routineType}
                 selectedDate={selectedDate}
+                selectedDietDay={selectedDietDay}
                 selectedDay={selectedDay}
                 selectedRoutine={selectedRoutine}
                 userName={userName}
